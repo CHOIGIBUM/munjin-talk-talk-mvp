@@ -14,7 +14,7 @@ import {
 //   POST /upload-url          → S3 presigned PUT URL 발급
 //   GET  /transcribe-result   → Transcribe 결과 폴링
 //   POST /extract             → Span 추출 (Claude or 규칙 기반)
-//   POST /match               → 벡터 매칭 (Titan Embed, Q1만)
+//   POST /match               → BM25 + Titan hybrid 증상 매칭 (Q1/Q3)
 //   POST /validate            → 4단 검증 + DDB 저장
 //   GET  /onepager/{id}       → 의사 원페이퍼 조회
 //   POST /doctor-response     → 의사 답변 수신 + Patient Guide 생성

@@ -1,10 +1,13 @@
 import json
+import math
 import os
 import re
 import time
 import hashlib
+from collections import Counter
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from urllib.parse import unquote_plus
 
 import boto3
@@ -27,6 +30,19 @@ GUIDE_MODEL_ID = os.environ.get("GUIDE_MODEL_ID", LIGHT_MODEL_ID)
 MAX_LLM_TOKENS = int(os.environ.get("MAX_LLM_TOKENS", "1600"))
 REVIEW_MAX_TOKENS = int(os.environ.get("REVIEW_MAX_TOKENS", "900"))
 GUIDE_MAX_TOKENS = int(os.environ.get("GUIDE_MAX_TOKENS", "900"))
+DATA_DIR = Path(__file__).resolve().parent / "data"
+DISEASES_PATH = DATA_DIR / "diseases_cleaned.json"
+SYMPTOM_INDEX_PATH = DATA_DIR / "symptom_index.json"
+EMBEDDING_MODEL_ID = os.environ.get("EMBEDDING_MODEL_ID", "amazon.titan-embed-text-v2:0")
+EMBEDDING_DIMENSIONS = int(os.environ.get("EMBEDDING_DIMENSIONS", "512"))
+USE_TITAN_EMBEDDING = os.environ.get("USE_TITAN_EMBEDDING", "true").lower() == "true"
+HYBRID_TOP_K = int(os.environ.get("HYBRID_TOP_K", "5"))
+HYBRID_CANDIDATE_K = int(os.environ.get("HYBRID_CANDIDATE_K", "24"))
+HYBRID_ACCEPT_THRESHOLD = float(os.environ.get("HYBRID_ACCEPT_THRESHOLD", "0.18"))
+HYBRID_BM25_WEIGHT = float(os.environ.get("HYBRID_BM25_WEIGHT", "0.35"))
+HYBRID_VECTOR_WEIGHT = float(os.environ.get("HYBRID_VECTOR_WEIGHT", "0.65"))
+HYBRID_PRECOMPUTE_DOC_EMBEDDINGS = os.environ.get("HYBRID_PRECOMPUTE_DOC_EMBEDDINGS", "false").lower() == "true"
+EMBEDDING_CACHE_PATH = DATA_DIR / f"symptom_embeddings_{EMBEDDING_MODEL_ID.replace(':', '_').replace('/', '_')}_{EMBEDDING_DIMENSIONS}.json"
 
 ddb = boto3.resource("dynamodb", region_name=REGION)
 table = ddb.Table(TABLE_NAME)
@@ -411,6 +427,540 @@ SYMPTOM_QUOTE_PATTERNS = {
         r"가래(?:가|는|도)?\s*(?:나요|나와요|있어요|껴요)",
     ],
 }
+
+IR_STABLE_SLOT_IDS = {
+    "객혈": "hemoptysis",
+    "기침": "cough",
+    "목의 통증": "sore_throat",
+    "목 자극": "throat_irritation",
+    "가래": "sputum",
+    "호흡곤란": "dyspnea",
+    "숨참": "dyspnea",
+    "흉통": "chest_pain",
+    "가슴 답답": "chest_discomfort",
+    "콧물": "rhinorrhea",
+    "코막힘": "nasal_obstruction",
+    "발열": "fever",
+    "열": "fever",
+    "두통": "headache",
+    "천명음": "wheezing",
+    "목소리 변화": "voice_change",
+    "삼키기 곤란": "dysphagia",
+}
+IR_SLOT_TO_CANONICAL_NAME = {
+    "hemoptysis": "객혈",
+    "cough": "기침",
+    "throat_irritation": "목의 통증",
+    "sore_throat": "목의 통증",
+    "nasal_obstruction": "코막힘",
+    "rhinorrhea": "콧물",
+    "sputum": "가래",
+    "fever": "열",
+    "dyspnea": "호흡곤란",
+    "chest_pain": "흉통",
+    "wheezing": "천명음",
+    "headache": "두통",
+    "voice_change": "목소리 변화",
+}
+IR_TEXT_ALIASES = [
+    (r"목|인후|칼칼|따끔", "목의 통증"),
+    (r"코.{0,3}(막|맥)|비폐색", "코막힘"),
+    (r"콧물|코물", "콧물"),
+    (r"가래|객담", "가래"),
+    (r"기침|콜록", "기침"),
+    (r"피.{0,4}(가래|섞|묻)|객혈", "객혈"),
+    (r"숨|호흡곤란|숨참", "호흡곤란"),
+    (r"가슴.{0,4}(아프|통증)|흉통", "흉통"),
+    (r"쌕쌕|천명", "천명음"),
+    (r"열|발열|고열", "열"),
+]
+IR_RED_FLAG_NAMES = {"객혈", "호흡곤란", "흉통", "청색증", "의식 변화"}
+_IR_DOCS = None
+_IR_BM25 = None
+_IR_ID_TO_NAME = {}
+_IR_NAME_TO_ID = {}
+_IR_DOC_EMBEDDINGS = None
+_EMBED_TEXT_CACHE = {}
+
+
+def normalize_text(text):
+    if text is None:
+        return ""
+    text = str(text).replace("\u200b", " ").replace("\xa0", " ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def compact_ir(text):
+    return re.sub(r"[^0-9A-Za-z가-힣]+", "", normalize_text(text))
+
+
+def load_json_file(path):
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def split_sentences_ir(text):
+    text = normalize_text(text)
+    if not text:
+        return []
+    raw = re.split(r"(?<=[.!?。])\s+|\n+", text)
+    out = []
+    for item in raw:
+        item = normalize_text(item).strip(" .")
+        if len(item) >= 8:
+            out.append(item)
+    return out
+
+
+def sentence_directly_mentions_symptom(sentence, symptom):
+    sentence_key = compact_ir(sentence)
+    symptom_key = compact_ir(symptom)
+    if not sentence_key or not symptom_key:
+        return False
+    if symptom_key in sentence_key:
+        return True
+    parts = [compact_ir(part) for part in re.split(r"\s+", symptom) if len(compact_ir(part)) >= 2]
+    return len(parts) >= 2 and all(part in sentence_key for part in parts)
+
+
+def trim_snippet(text, max_len=180):
+    text = normalize_text(text)
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def make_symptom_id(symptom_name):
+    if symptom_name in IR_STABLE_SLOT_IDS:
+        return IR_STABLE_SLOT_IDS[symptom_name]
+    digest = hashlib.sha1(symptom_name.encode("utf-8")).hexdigest()[:10]
+    return f"symptom:{digest}"
+
+
+def build_symptom_docs_from_sources():
+    diseases = load_json_file(DISEASES_PATH)
+    symptom_index = load_json_file(SYMPTOM_INDEX_PATH)
+    disease_by_content_id = {}
+    disease_rows = diseases if isinstance(diseases, list) else []
+    for disease in disease_rows:
+        cid = str(disease.get("content_id", ""))
+        if cid:
+            disease_by_content_id[cid] = disease
+
+    docs = []
+    for symptom_name in sorted(symptom_index.keys()):
+        refs = symptom_index.get(symptom_name) or []
+        symptom_id = make_symptom_id(symptom_name)
+        evidence_refs = []
+        direct_snippets = []
+        linked_disease_names = []
+        departments_counter = Counter()
+        categories_counter = Counter()
+        seen_content_ids = set()
+
+        for ref in refs:
+            cid = str(ref.get("content_id", ""))
+            if not cid or cid in seen_content_ids:
+                continue
+            seen_content_ids.add(cid)
+            disease = disease_by_content_id.get(cid)
+            if not disease:
+                continue
+            name_ko = normalize_text(disease.get("name_ko") or ref.get("name_ko") or "")
+            category = normalize_text(disease.get("category") or "")
+            if name_ko:
+                linked_disease_names.append(name_ko)
+            if category:
+                categories_counter[category] += 1
+            for dep in disease.get("departments") or ref.get("departments") or []:
+                dep = normalize_text(dep)
+                if dep:
+                    departments_counter[dep] += 1
+
+            sections = disease.get("sections") or {}
+            definition = normalize_text(sections.get("definition", ""))
+            symptom_section = normalize_text(sections.get("symptom", ""))
+            evidence_refs.append({
+                "content_id": cid,
+                "disease_name": name_ko,
+                "source_url": disease.get("source_url", ref.get("source_url", "")),
+                "category": category,
+                "departments": disease.get("departments") or ref.get("departments") or [],
+                "symptom_in_list": symptom_name in (disease.get("symptoms") or []),
+            })
+
+            for section_name, text in (("symptom", symptom_section), ("definition", definition)):
+                for sent in split_sentences_ir(text):
+                    if sentence_directly_mentions_symptom(sent, symptom_name):
+                        snippet = trim_snippet(sent)
+                        key = (cid, section_name, snippet)
+                        if not any((x["content_id"], x["section"], x["text"]) == key for x in direct_snippets):
+                            direct_snippets.append({
+                                "content_id": cid,
+                                "disease_name": name_ko,
+                                "section": section_name,
+                                "text": snippet,
+                            })
+                    if len(direct_snippets) >= 8:
+                        break
+                if len(direct_snippets) >= 8:
+                    break
+
+        top_diseases = [name for name in linked_disease_names if name][:8]
+        top_departments = [name for name, _ in departments_counter.most_common(6)]
+        top_categories = [name for name, _ in categories_counter.most_common(4)]
+        direct_text = " ".join(item["text"] for item in direct_snippets[:5])
+        disease_text = ", ".join(top_diseases)
+        dept_text = ", ".join(top_departments)
+        retrieval_parts = [
+            f"표준 증상명: {symptom_name}.",
+            f"아산백과 증상 목록에서 '{symptom_name}'으로 기록된 표준 증상 후보.",
+        ]
+        if direct_text:
+            retrieval_parts.append(f"증상 직접 근거 문장: {direct_text}")
+        if disease_text:
+            retrieval_parts.append(f"관련 아산백과 문서명: {disease_text}.")
+        if dept_text:
+            retrieval_parts.append(f"관련 진료과: {dept_text}.")
+        embedding_parts = [
+            f"{symptom_name}.",
+            f"환자 발화에서 '{symptom_name}'과 의미가 가까운 증상 표현을 표준 증상 후보로 매칭하기 위한 문서.",
+        ]
+        if direct_text:
+            embedding_parts.append(direct_text)
+        docs.append({
+            "symptom_id": symptom_id,
+            "display_name": symptom_name,
+            "bm25_text": normalize_text(" ".join([symptom_name, f"표준 증상명 {symptom_name}", direct_text])),
+            "retrieval_text": normalize_text("\n".join(retrieval_parts)),
+            "embedding_text": normalize_text(" ".join(embedding_parts)),
+            "evidence": direct_snippets[:8],
+            "evidence_refs": evidence_refs,
+            "linked_disease_names": top_diseases,
+            "domain_candidates": top_categories,
+            "departments": top_departments,
+        })
+    return docs
+
+
+def tokenize_ir(text):
+    text = normalize_text(text).lower()
+    compacted = compact_ir(text.lower())
+    tokens = re.findall(r"[가-힣a-z0-9]+", text)
+    for n in (2, 3):
+        if len(compacted) >= n:
+            tokens.extend(compacted[i:i + n] for i in range(len(compacted) - n + 1))
+    return [token for token in tokens if token]
+
+
+class BM25Index:
+    def __init__(self, docs, k1=1.5, b=0.75):
+        self.docs = docs
+        self.k1 = k1
+        self.b = b
+        self.doc_tokens = [tokenize_ir(((doc["display_name"] + " ") * 4) + doc.get("bm25_text", "")) for doc in docs]
+        self.doc_lens = [len(tokens) for tokens in self.doc_tokens]
+        self.avgdl = sum(self.doc_lens) / max(1, len(self.doc_lens))
+        self.df = {}
+        self.tf = []
+        for tokens in self.doc_tokens:
+            counts = {}
+            for token in tokens:
+                counts[token] = counts.get(token, 0) + 1
+            self.tf.append(counts)
+            for token in counts:
+                self.df[token] = self.df.get(token, 0) + 1
+        self.N = len(docs)
+
+    def idf(self, term):
+        df = self.df.get(term, 0)
+        return math.log(1 + (self.N - df + 0.5) / (df + 0.5))
+
+    def scores(self, query):
+        q_terms = tokenize_ir(query)
+        if not q_terms:
+            return [0.0] * self.N
+        scores = []
+        for idx, counts in enumerate(self.tf):
+            dl = self.doc_lens[idx] or 1
+            score = 0.0
+            for term in q_terms:
+                freq = counts.get(term, 0)
+                if freq <= 0:
+                    continue
+                denom = freq + self.k1 * (1 - self.b + self.b * dl / max(self.avgdl, 1e-9))
+                score += self.idf(term) * (freq * (self.k1 + 1)) / denom
+            scores.append(float(score))
+        return scores
+
+
+def get_ir_index():
+    global _IR_DOCS, _IR_BM25, _IR_ID_TO_NAME, _IR_NAME_TO_ID
+    if _IR_DOCS is None:
+        docs = build_symptom_docs_from_sources()
+        _IR_DOCS = docs
+        _IR_BM25 = BM25Index(docs)
+        _IR_ID_TO_NAME = {doc["symptom_id"]: doc["display_name"] for doc in docs}
+        _IR_NAME_TO_ID = {doc["display_name"]: doc["symptom_id"] for doc in docs}
+    return _IR_DOCS, _IR_BM25
+
+
+def minmax_norm(values):
+    if not values:
+        return []
+    lo = min(values)
+    hi = max(values)
+    if hi <= lo:
+        return [0.0 for _ in values]
+    return [(value - lo) / (hi - lo) for value in values]
+
+
+def jaccard_char_ngram(a, b, n=2):
+    a = compact_ir(a)
+    b = compact_ir(b)
+    if not a or not b:
+        return 0.0
+    aa = {a[i:i + n] for i in range(max(1, len(a) - n + 1))} if len(a) >= n else {a}
+    bb = {b[i:i + n] for i in range(max(1, len(b) - n + 1))} if len(b) >= n else {b}
+    return len(aa & bb) / max(1, len(aa | bb))
+
+
+def cosine(a, b):
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(float(x) * float(y) for x, y in zip(a, b))
+    na = math.sqrt(sum(float(x) * float(x) for x in a))
+    nb = math.sqrt(sum(float(y) * float(y) for y in b))
+    if not na or not nb:
+        return 0.0
+    return dot / (na * nb)
+
+
+def direct_label_score(query, label):
+    q = normalize_text(query)
+    s = normalize_text(label)
+    qc = compact_ir(q)
+    sc = compact_ir(s)
+    if not qc or not sc:
+        return 0.0
+    if qc == sc:
+        return 1.0
+    if len(sc) == 1:
+        return 0.72 if any(token.startswith(s) for token in q.split()) else 0.0
+    contains = 0.78 if sc in qc and len(sc) >= 2 else 0.0
+    reverse_contains = 0.65 if qc in sc and len(qc) >= 2 else 0.0
+    return max(contains, reverse_contains, jaccard_char_ngram(q, s, 2) * 0.75)
+
+
+def rule_based_symptom_label(text):
+    text = normalize_text(text)
+    rules = [
+        (r"가래.{0,8}피|피.{0,4}가래|객혈|피가\s*섞|피\s*섞", "객혈"),
+        (r"입술.{0,4}파래|얼굴.{0,4}파래|손톱.{0,4}파래|청색증", "청색증"),
+        (r"의식.{0,8}(흐려|혼미|저하|잃|소실)|정신.{0,8}(없|혼미|흐려|잃)|실신|쓰러", "의식 변화"),
+        (r"숨.{0,8}(못\s*쉬|쉬기\s*힘|차|가빠)|호흡곤란|숨참", "호흡곤란"),
+        (r"가슴.{0,8}(아프|아파|통증|결려|쥐어)|흉통", "흉통"),
+        (r"쌕쌕|천명", "천명음"),
+    ]
+    for pattern, label in rules:
+        if re.search(pattern, text):
+            return label
+    return ""
+
+
+def preferred_canonical_name(slot_id, *texts):
+    docs, _ = get_ir_index()
+    valid_names = {doc["display_name"] for doc in docs}
+    mapped = IR_SLOT_TO_CANONICAL_NAME.get(str(slot_id or ""))
+    if mapped in valid_names:
+        return mapped
+    joined = normalize_text(" ".join(text for text in texts if text))
+    for pattern, name in IR_TEXT_ALIASES:
+        if name in valid_names and re.search(pattern, joined):
+            return name
+    return ""
+
+
+def docs_hash(docs):
+    source = "\n".join(f"{doc['symptom_id']}|{doc['display_name']}|{doc['embedding_text']}" for doc in docs)
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def load_packaged_doc_embeddings(docs):
+    if not EMBEDDING_CACHE_PATH.exists():
+        return None
+    try:
+        data = load_json_file(EMBEDDING_CACHE_PATH)
+        if data.get("model_id") != EMBEDDING_MODEL_ID:
+            return None
+        if int(data.get("dimensions") or 0) != EMBEDDING_DIMENSIONS:
+            return None
+        if data.get("docs_hash") != docs_hash(docs):
+            return None
+        embeddings = data.get("embeddings")
+        return embeddings if isinstance(embeddings, dict) else None
+    except Exception:
+        return None
+
+
+def embed_text(text):
+    text = normalize_text(text)
+    if not text or not USE_TITAN_EMBEDDING:
+        return None
+    key = f"{EMBEDDING_MODEL_ID}|{EMBEDDING_DIMENSIONS}|{text}"
+    if key in _EMBED_TEXT_CACHE:
+        return _EMBED_TEXT_CACHE[key]
+    body = {"inputText": text, "dimensions": EMBEDDING_DIMENSIONS, "normalize": True}
+    resp = bedrock_runtime.invoke_model(
+        modelId=EMBEDDING_MODEL_ID,
+        body=json.dumps(body),
+        accept="application/json",
+        contentType="application/json",
+    )
+    result = json.loads(resp["body"].read())
+    embedding = result.get("embedding")
+    if isinstance(embedding, list):
+        _EMBED_TEXT_CACHE[key] = embedding
+        return embedding
+    return None
+
+
+def get_doc_embeddings(docs):
+    global _IR_DOC_EMBEDDINGS
+    if _IR_DOC_EMBEDDINGS is not None:
+        return _IR_DOC_EMBEDDINGS
+    packaged = load_packaged_doc_embeddings(docs)
+    if packaged is not None:
+        _IR_DOC_EMBEDDINGS = packaged
+        return _IR_DOC_EMBEDDINGS
+    if not HYBRID_PRECOMPUTE_DOC_EMBEDDINGS:
+        _IR_DOC_EMBEDDINGS = {}
+        return _IR_DOC_EMBEDDINGS
+    embeddings = {}
+    for doc in docs:
+        emb = embed_text(doc.get("embedding_text", ""))
+        if emb:
+            embeddings[doc["symptom_id"]] = emb
+    _IR_DOC_EMBEDDINGS = embeddings
+    return _IR_DOC_EMBEDDINGS
+
+
+def retrieve_symptom_docs(source_quote, normalized_text, span_name="", preferred_slot_id=""):
+    docs, bm25 = get_ir_index()
+    query = normalize_text(" ".join([source_quote or "", normalized_text or "", span_name or ""]))
+    if not query:
+        return []
+    preferred_name = preferred_canonical_name(preferred_slot_id, span_name, normalized_text, source_quote)
+
+    bm25_raw = bm25.scores(query)
+    bm25_norm = minmax_norm(bm25_raw)
+    q_emb = None
+    vector_raw = [0.0] * len(docs)
+    vector_error = ""
+    if USE_TITAN_EMBEDDING:
+        try:
+            q_emb = embed_text(query)
+        except Exception as exc:
+            vector_error = str(exc)
+
+    doc_embeddings = get_doc_embeddings(docs) if q_emb is not None else {}
+    if q_emb is not None and doc_embeddings:
+        for idx, doc in enumerate(docs):
+            vector_raw[idx] = max(0.0, cosine(q_emb, doc_embeddings.get(doc["symptom_id"])))
+    vector_norm = minmax_norm(vector_raw)
+
+    candidate_k = max(HYBRID_CANDIDATE_K, HYBRID_TOP_K * 3)
+    bm25_top = set(sorted(range(len(docs)), key=lambda i: bm25_norm[i], reverse=True)[:candidate_k])
+    vector_top = set(sorted(range(len(docs)), key=lambda i: vector_norm[i], reverse=True)[:candidate_k]) if doc_embeddings else set()
+    label_top = {
+        idx
+        for idx, doc in enumerate(docs)
+        if direct_label_score(query, doc["display_name"]) >= 0.55 or doc["display_name"] == preferred_name
+    }
+    candidate_ids = bm25_top | vector_top | label_top
+    if q_emb is not None and not doc_embeddings:
+        # Packaged vector index is absent: still use Titan for the BM25/label candidates.
+        for idx in list(candidate_ids):
+            try:
+                emb = embed_text(docs[idx].get("embedding_text", ""))
+                vector_raw[idx] = max(0.0, cosine(q_emb, emb))
+            except Exception as exc:
+                vector_error = str(exc)
+        candidate_vectors = [vector_raw[idx] for idx in candidate_ids]
+        norm_lookup = dict(zip(candidate_ids, minmax_norm(candidate_vectors)))
+        vector_norm = [norm_lookup.get(idx, 0.0) for idx in range(len(docs))]
+
+    rows = []
+    intersection_ids = bm25_top & (vector_top or candidate_ids)
+    for idx in candidate_ids:
+        doc = docs[idx]
+        label = direct_label_score(query, doc["display_name"])
+        preferred_hit = doc["display_name"] == preferred_name
+        if preferred_hit:
+            label = max(label, 1.0)
+        if bm25_norm[idx] <= 0 and vector_norm[idx] <= 0 and label <= 0:
+            continue
+        branch = "both" if idx in intersection_ids else ("bm25_only" if idx in bm25_top else "vector_only")
+        rank_score = HYBRID_BM25_WEIGHT * bm25_norm[idx] + HYBRID_VECTOR_WEIGHT * vector_norm[idx] + 0.25 * label
+        if preferred_hit:
+            branch = "preferred_alias"
+            rank_score += 0.45
+        if branch == "both":
+            rank_score += 0.08
+        elif branch == "bm25_only" and vector_raw[idx] < 0.12:
+            rank_score *= 0.55
+
+        vector_conf = max(0.0, min(1.0, vector_raw[idx] / 0.30))
+        confidence = 0.50 * bm25_norm[idx] + 0.50 * vector_conf
+        if preferred_hit:
+            confidence = max(confidence, 0.90)
+        if branch == "both":
+            confidence = min(1.0, confidence + 0.08)
+        elif branch == "bm25_only" and vector_raw[idx] < 0.12:
+            confidence *= 0.70
+        elif branch == "vector_only" and bm25_norm[idx] == 0 and vector_raw[idx] < 0.16:
+            confidence *= 0.85
+
+        rows.append({
+            "slot_id": doc["symptom_id"],
+            "display_text": doc["display_name"],
+            "score": round(float(confidence), 4),
+            "rank_score": round(float(rank_score), 4),
+            "bm25_score": round(float(bm25_norm[idx]), 4),
+            "vector_score": round(float(vector_raw[idx]), 4),
+            "vector_norm": round(float(vector_norm[idx]), 4),
+            "label_score": round(float(label), 4),
+            "retrieval_branch": branch,
+            "source": "diseases_cleaned+symptom_index",
+            "evidence": doc.get("evidence", [])[:3],
+            "linked_disease_names": doc.get("linked_disease_names", [])[:8],
+            "domain_candidates": doc.get("domain_candidates", []),
+            "vector_error": vector_error,
+        })
+
+    override = rule_based_symptom_label(query)
+    override_doc = next((doc for doc in docs if doc["display_name"] == override), None)
+    if override_doc is not None:
+        rows = [row for row in rows if row["display_text"] != override_doc["display_name"]]
+        rows.append({
+            "slot_id": override_doc["symptom_id"],
+            "display_text": override_doc["display_name"],
+            "score": 1.0,
+            "rank_score": 10.0,
+            "bm25_score": 1.0,
+            "vector_score": 1.0,
+            "vector_norm": 1.0,
+            "label_score": 1.0,
+            "retrieval_branch": "safety_alias_override",
+            "source": "diseases_cleaned+symptom_index",
+            "evidence": override_doc.get("evidence", [])[:3],
+            "linked_disease_names": override_doc.get("linked_disease_names", [])[:8],
+            "domain_candidates": override_doc.get("domain_candidates", []),
+            "vector_error": vector_error,
+        })
+
+    rows.sort(key=lambda item: item["rank_score"], reverse=True)
+    return rows[:HYBRID_TOP_K]
 
 
 def extract_question(body):
@@ -843,7 +1393,18 @@ def sentence_for(text, keyword):
 
 
 def is_symptom_like_span(span_type, slot_id):
-    return str(span_type or "") in SYMPTOM_SPAN_TYPES and str(slot_id or "") in VALID_SYMPTOM_SLOT_IDS
+    if str(span_type or "") not in SYMPTOM_SPAN_TYPES:
+        return False
+    slot_id = str(slot_id or "")
+    if not slot_id or slot_id == "other":
+        return True
+    if slot_id in VALID_SYMPTOM_SLOT_IDS:
+        return True
+    try:
+        get_ir_index()
+    except Exception:
+        return False
+    return slot_id in _IR_ID_TO_NAME
 
 
 def match_slots(body):
@@ -856,34 +1417,90 @@ def match_slots(body):
         if not is_symptom_like_span(span_type, slot_id):
             unmatched.append(span)
             continue
-        if slot_id in VALID_SYMPTOM_SLOT_IDS:
-            name = span.get("name") or slot_to_name(slot_id)
-            score = span.get("score", Decimal("0.88") if slot_id != "hemoptysis" else Decimal("0.97"))
-            try:
-                score = Decimal(str(score))
-            except Exception:
-                score = Decimal("0.88")
-            if score <= 0:
-                score = Decimal("0.86")
-            matched.append({
-                "slot_id": slot_id,
-                "name": name,
-                "score": score,
-                "source_quote": span.get("source_quote", ""),
-                "span_type": span_type,
-                "alert": bool(span.get("alert") or slot_id in ("hemoptysis", "dyspnea", "chest_pain")),
-                "normalized_text": span.get("normalized_text") or name,
-                "status": span.get("status") or "있음",
-                "explain": span.get("explain") or "Bedrock LLM이 환자 발화에서 의미 단위를 추출했습니다.",
-            })
-        elif span.get("type") == "symptom":
+        candidates = retrieve_symptom_docs(
+            span.get("source_quote", ""),
+            span.get("normalized_text") or span.get("name") or "",
+            span.get("name") or slot_to_name(slot_id),
+            slot_id,
+        )
+        if not candidates:
             unmatched.append(span)
+            continue
+        top = candidates[0]
+        score = Decimal(str(top.get("score", 0)))
+        status = span.get("status") if span.get("status") in ("있음", "없음", "확인필요") else "있음"
+        if status == "있음" and float(score) < HYBRID_ACCEPT_THRESHOLD:
+            status = "확인필요"
+        name = top.get("display_text") or span.get("name") or slot_to_name(top.get("slot_id"))
+        alert = bool(
+            span.get("alert")
+            or top.get("slot_id") in ("hemoptysis", "dyspnea", "chest_pain")
+            or name in IR_RED_FLAG_NAMES
+        )
+        matched.append({
+            "slot_id": top.get("slot_id"),
+            "name": name,
+            "score": score,
+            "source_quote": span.get("source_quote", ""),
+            "span_type": span_type,
+            "alert": alert,
+            "normalized_text": span.get("normalized_text") or span.get("name") or name,
+            "status": status,
+            "explain": make_symptom_match_explain(span, top),
+            "ir_method": "bm25_titan_hybrid" if USE_TITAN_EMBEDDING else "bm25_only",
+            "ir_trace": {
+                "query": normalize_text(" ".join([
+                    span.get("source_quote", ""),
+                    span.get("normalized_text") or span.get("name") or "",
+                ])),
+                "bm25_score": top.get("bm25_score"),
+                "vector_score": top.get("vector_score"),
+                "vector_norm": top.get("vector_norm"),
+                "label_score": top.get("label_score"),
+                "rank_score": top.get("rank_score"),
+                "retrieval_branch": top.get("retrieval_branch"),
+                "source": top.get("source"),
+                "linked_disease_names": top.get("linked_disease_names", []),
+                "evidence": top.get("evidence", []),
+                "top_candidates": [
+                    {
+                        "slot_id": cand.get("slot_id"),
+                        "name": cand.get("display_text"),
+                        "score": cand.get("score"),
+                        "bm25_score": cand.get("bm25_score"),
+                        "vector_score": cand.get("vector_score"),
+                        "rank_score": cand.get("rank_score"),
+                    }
+                    for cand in candidates[:3]
+                ],
+            },
+        })
     return {"matched_slots": matched, "unmatched_spans": unmatched}
 
 
 def slot_to_name(slot_id):
+    if slot_id:
+        try:
+            get_ir_index()
+            if slot_id in _IR_ID_TO_NAME:
+                return _IR_ID_TO_NAME[slot_id]
+        except Exception:
+            pass
     mapping = {slot_id: name for name, slot_id, _, _ in SYMPTOM_RULES}
     return mapping.get(slot_id, slot_id or "-")
+
+
+def make_symptom_match_explain(span, top):
+    branch = top.get("retrieval_branch") or "hybrid"
+    bm25_score = top.get("bm25_score", 0)
+    vector_score = top.get("vector_score", 0)
+    label_score = top.get("label_score", 0)
+    if branch == "safety_alias_override":
+        return "안전 관련 핵심 표현이 있어 표준 증상 후보를 우선 매칭했습니다."
+    return (
+        "환자 표현을 아산백과 기반 증상 인덱스와 비교했습니다. "
+        f"BM25 {bm25_score}, Titan 의미점수 {vector_score}, 표준명 유사도 {label_score}를 함께 반영했습니다."
+    )
 
 
 def validate_and_save(body):
@@ -1005,18 +1622,20 @@ def slot_to_symptom_slot(slot, qid, transcript=""):
         score = Decimal(str(score))
     except Exception:
         score = Decimal("0.86")
-    if score <= 0:
+    if score <= 0 and not slot.get("ir_method"):
         score = Decimal("0.86")
     return {
         "slot_id": slot_id,
         "name": slot.get("name") or slot_to_name(slot_id),
         "source_question": qid,
         "source_quote": source_quote,
-        "normalized_text": slot.get("name") or "",
-        "status": "있음",
+        "normalized_text": slot.get("normalized_text") or slot.get("name") or "",
+        "status": slot.get("status") or "있음",
         "score": score,
         "alert": bool(slot.get("alert")),
-        "explain": "환자 발화에서 증상 표현을 확인했습니다.",
+        "explain": slot.get("explain") or "환자 발화에서 증상 표현을 확인했습니다.",
+        "ir_method": slot.get("ir_method"),
+        "ir_trace": slot.get("ir_trace") or {},
     }
 
 
