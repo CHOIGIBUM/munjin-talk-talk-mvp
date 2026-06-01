@@ -1584,7 +1584,7 @@ def build_onepager(session):
     clinical = build_clinical_clues(q1, q2, q3, visit_type)
     agenda = normalize_agenda(q4)
     safety = scan_safety(" ".join([r.get("text", "") for r in responses.values() if isinstance(r, dict)]), q1.get("matched_slots", []) + q3.get("matched_slots", []))
-    review_items = build_review_items(slots, agenda, safety, clinical)
+    fallback_review_items = build_review_items(slots, agenda, safety, clinical)
     onepager = {
         "patient_summary": {
             "display_name": patient.get("name") or mask_name(patient.get("full_name")),
@@ -1599,13 +1599,19 @@ def build_onepager(session):
         "symptom_slots": slots,
         "clinical_clues": clinical,
         "doctor_brief": {"headline": "", "sections": []},
-        "review_items": review_items,
+        "review_items": [],
         "transfer_text": build_transfer_text(patient, slots, clinical, agenda, visit_type),
         "safety_flags": [safety] if safety else [],
         "unresolved_items": [],
     }
     if USE_BEDROCK_LLM and ENABLE_BEDROCK_REVIEW and responses:
-        onepager = apply_bedrock_onepager_review(session, onepager)
+        onepager = apply_bedrock_onepager_review(session, onepager, fallback_review_items)
+    if not onepager.get("review_items"):
+        onepager["review_items"] = fallback_review_items
+        onepager["review_item_generation"] = {
+            "method": "rule_fallback",
+            "reason": (onepager.get("llm_review") or {}).get("error") or "llm_review_empty",
+        }
     return onepager
 
 
@@ -1797,11 +1803,15 @@ def build_review_items(slots, agenda, safety, clinical=None):
     if safety:
         items.extend(["[우선] 객혈량과 시작 시점 확인", "[우선] 흉부 X-ray/객담 검사 고려"])
     names = {slot.get("name") for slot in slots}
-    if names:
+    clinical_text = " ".join(
+        clean_quote(c.get("summary") or c.get("source_quote") or c.get("label") or "")
+        for c in (clinical or [])
+    )
+    if names & {"열", "발열"} or re.search(r"고열|발열|열", clinical_text):
         items.append("발열 여부와 실제 체온 확인")
-    if "기침" in names:
+    if "기침" in names or "가래" in names:
         items.append("가래 동반 여부와 색깔")
-    if "코막힘" in names or "콧물" in names:
+    if {"코막힘", "콧물", "재채기"} & names:
         items.append("비폐색/콧물 지속 정도와 알레르기 병력 확인")
     if any(c.get("label") == "건강보조제" for c in (clinical or [])):
         items.append("복용 중인 영양제 종류와 병용 가능성 확인")
@@ -1829,15 +1839,20 @@ def build_transfer_text(patient, slots, clinical, agenda, visit_type):
     return text
 
 
-def apply_bedrock_onepager_review(session, onepager):
+def apply_bedrock_onepager_review(session, onepager, fallback_review_items=None):
     try:
-        prompt = build_onepager_review_prompt(session, onepager)
+        prompt = build_onepager_review_prompt(session, onepager, fallback_review_items or [])
         obj, raw_text = call_bedrock_json(prompt, REVIEWER_MODEL_ID, REVIEW_MAX_TOKENS)
         reviewed = dict(onepager)
         if isinstance(obj.get("review_items"), list):
             items = [clean_quote(x) for x in obj.get("review_items", []) if clean_quote(x)]
+            items = sanitize_review_items(items, onepager)
             if items:
                 reviewed["review_items"] = unique(items)[:8]
+                reviewed["review_item_generation"] = {
+                    "method": "bedrock_nova_pro",
+                    "model_id": REVIEWER_MODEL_ID,
+                }
         transfer = clean_quote(obj.get("transfer_text") or "")
         if transfer:
             reviewed["transfer_text"] = transfer
@@ -1855,7 +1870,7 @@ def apply_bedrock_onepager_review(session, onepager):
         return reviewed
 
 
-def build_onepager_review_prompt(session, onepager):
+def build_onepager_review_prompt(session, onepager, heuristic_candidates=None):
     payload = {
         "visit_type": visit_label(session.get("visit_type")),
         "patient": session.get("patient", {}),
@@ -1869,18 +1884,41 @@ def build_onepager_review_prompt(session, onepager):
             if isinstance(value, dict)
         },
         "draft_onepager": onepager,
+        "heuristic_candidates_do_not_copy_blindly": heuristic_candidates or [],
     }
     return f"""
-You are the final medical intake review LLM for a Korean clinic one-paper.
-Review the draft made from Bedrock semantic parsing.
+You are the physician-facing task orchestration LLM for a Korean outpatient intake one-paper.
+Your job is NOT to diagnose. Your job is to read the full structured intake data and create the tasks a doctor should handle during the visit.
 
-Rules:
-- Do not diagnose and do not add facts not supported by responses.
-- Keep outputs concise for a physician.
-- review_items should be practical clinician check items.
-- transfer_text should be one EMR-style Korean sentence or two short sentences.
-- If multiple patient questions exist, preserve that plurality.
-- Return JSON only.
+You will receive:
+- patient metadata
+- raw Q1-Q4 transcripts
+- semantic parsing results from earlier LLM calls
+- symptom_slots matched by BM25 + Titan embedding IR
+- clinical_clues extracted from the conversation
+- patient agenda/questions from Q4
+- safety flags
+- heuristic_candidates_do_not_copy_blindly: rough code-generated candidates that may be incomplete or wrong
+
+Core rules:
+1. Generate review_items from the full evidence, not from fixed templates.
+2. Use heuristic candidates only as hints. Do not copy them blindly.
+3. Every review_item must be grounded in at least one of: symptom_slots, clinical_clues, agenda, safety_flags, or raw responses.
+4. Do not add generic tasks unless the transcript supports them.
+   - Do NOT mention fever/temperature unless fever, heat, high fever, chills, or antipyretic issue appears.
+   - Do NOT mention X-ray, TB, pneumonia, cancer, antibiotics, or tests unless safety flags or patient wording supports it.
+5. If Q4 contains patient questions, create a clinician task to answer each distinct question.
+6. If medication/supplement/adherence information appears, create a task only when it changes counseling or safety.
+7. Use the prefix "[우선]" only when safety_flags is non-empty or the raw patient wording clearly describes a red flag. Do not use "[우선]" for ordinary sore throat, nasal obstruction, or runny nose.
+8. Keep each review_item short, concrete, and action-oriented in Korean.
+9. Avoid vague tasks such as "원인 규명", "진단 필요", or "평가 필요" by themselves. Specify what to check, ask, counsel, or answer.
+10. Preserve uncertainty. Use "확인" or "평가" rather than asserting unsupported facts.
+11. Return JSON only. No markdown, no prose outside JSON.
+
+Output quality target:
+- 2 to 6 review_items for ordinary cases.
+- 1 to 3 doctor_brief sections.
+- transfer_text should be one concise Korean EMR-style sentence or two short sentences.
 
 Return schema:
 {{
@@ -1898,6 +1936,19 @@ Return schema:
 Data:
 {json.dumps(payload, ensure_ascii=False, default=json_default)}
 """.strip()
+
+
+def sanitize_review_items(items, onepager):
+    has_safety = bool(onepager.get("safety_flags"))
+    sanitized = []
+    for item in items:
+        text = clean_quote(item)
+        if not text:
+            continue
+        if not has_safety:
+            text = re.sub(r"^\[우선\]\s*", "", text)
+        sanitized.append(text)
+    return sanitized
 
 
 def unique(values):
