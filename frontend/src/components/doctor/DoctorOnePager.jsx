@@ -284,8 +284,8 @@ export default function DoctorOnePager({ sessionId, sessionData, sidePanel, rend
                       <div className="slot-name">
                         {slot.name} <small>({slot.sub})</small>
                       </div>
-                      <div className={`slot-score ${slot.alert ? 'slot-score-alert' : ''}`}>
-                        {Number(slot.score || 0).toFixed(2)}
+                      <div className={`slot-match-badge ${slot.alert ? 'slot-match-badge-alert' : ''}`}>
+                        {slot.alert ? '우선 확인' : '매칭됨'}
                       </div>
                       {slot.sourceQuote && <div className="slot-quote">"{slot.sourceQuote}"</div>}
                       {slotClues.length > 0 && (
