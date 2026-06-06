@@ -59,7 +59,7 @@ AWS 서비스:
 ## 1. 저장소 확인
 
 ```powershell
-cd C:\Users\CGB\munjin-talk-talk-mvp
+cd <repo-root>
 git status --short --branch
 ```
 
@@ -74,7 +74,7 @@ test 브랜치에서 작업 중인지 확인:
 ## 2. 프론트엔드 로컬 실행
 
 ```powershell
-cd C:\Users\CGB\munjin-talk-talk-mvp\frontend
+cd frontend
 npm install
 Copy-Item .env.example .env.local
 ```
@@ -145,7 +145,7 @@ VITE_ENABLE_MOCKS=false
 기본 명령:
 
 ```powershell
-cd C:\Users\CGB\munjin-talk-talk-mvp\backend\serverless
+cd backend/serverless
 sam build
 sam deploy --guided
 ```
@@ -153,11 +153,11 @@ sam deploy --guided
 test 배포 예시:
 
 ```powershell
-cd C:\Users\CGB\munjin-talk-talk-mvp\backend\serverless
+cd backend/serverless
 
 $env:SAM_CLI_TELEMETRY='0'
-$env:APPDATA='C:\Users\CGB\AppData\Local\Temp'
-$env:Path='C:\Users\CGB\AppData\Local\Programs\Python\Python312;C:\Users\CGB\AppData\Local\Programs\Python\Python312\Scripts;' + $env:Path
+$env:APPDATA='<writable-appdata-path>'
+$env:Path='<python-3.12-dir>;<python-3.12-scripts-dir>;' + $env:Path
 
 & 'C:\Program Files\Amazon\AWSSAMCLI\bin\sam.cmd' build
 
@@ -176,7 +176,7 @@ $env:Path='C:\Users\CGB\AppData\Local\Programs\Python\Python312;C:\Users\CGB\App
 ## 6. 프론트엔드 빌드
 
 ```powershell
-cd C:\Users\CGB\munjin-talk-talk-mvp\frontend
+cd frontend
 npm run build
 ```
 

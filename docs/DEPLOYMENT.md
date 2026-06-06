@@ -30,7 +30,7 @@ GitHub repository
 | 백엔드 stack name | `munjin-mvp-backend-test` | CloudFormation stack 이름 |
 | DynamoDB table | `MunjinSessionsTest` | 세션 저장 테이블 |
 | Lambda role | `munjin-lambda-role` | Lambda 실행 role |
-| Artifact bucket | `munjin-mvp-test-artifacts-...` | SAM/임시 artifact bucket |
+| Artifact bucket | `<artifact-bucket-name>` | SAM/임시 artifact bucket |
 
 ---
 
@@ -122,7 +122,7 @@ amazon.titan-embed-text-v2:0
 PowerShell:
 
 ```powershell
-cd C:\Users\CGB\munjin-talk-talk-mvp\backend\serverless
+cd backend/serverless
 sam build
 sam deploy --guided
 ```
