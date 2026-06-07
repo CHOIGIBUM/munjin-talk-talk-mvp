@@ -37,11 +37,12 @@ export default function PrivacyConsentModal({
       <section className="privacy-consent-modal" role="dialog" aria-modal="true" aria-labelledby="privacy-consent-title">
         <h2 id="privacy-consent-title">서비스 이용 동의</h2>
         <p className="privacy-consent-lead">
-          {patientName}님의 음성 문진 내용을 서비스 이용에 사용합니다.
+          <span className="privacy-consent-line">{patientName}님의 음성 문진 내용을</span>
+          <span className="privacy-consent-line">서비스 이용에 사용합니다.</span>
         </p>
         <p className="privacy-consent-note">
-          음성 원본 파일은 저장하지 않고, 확인된 문진 텍스트만 임시로 기록합니다.
-          동의하지 않아도 직원이 수기 문진으로 도와드릴 수 있습니다.
+          <span className="privacy-consent-line">음성 원본 파일은 저장하지 않고, 확인된 문진 텍스트만 임시로 기록합니다.</span>
+          <span className="privacy-consent-line">동의하지 않아도 직원이 수기 문진으로 도와드릴 수 있습니다.</span>
         </p>
 
         <button

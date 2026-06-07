@@ -1276,7 +1276,7 @@ body {
 .privacy-consent-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1286,8 +1286,8 @@ body {
 }
 
 .privacy-consent-modal {
-  width: min(720px, calc(100vw - 42px));
-  max-height: min(88vh, 760px);
+  width: min(780px, calc(100vw - 42px));
+  max-height: min(calc(100vh - 56px), 760px);
   padding: 0;
   overflow-y: auto;
   border: 0;
@@ -1305,7 +1305,7 @@ body {
 }
 
 .privacy-consent-modal h2 {
-  margin: 34px 28px 18px;
+  margin: 30px 28px 18px;
   color: #0b2545;
   font-size: 34px;
   font-weight: 950;
@@ -1315,7 +1315,7 @@ body {
 
 .privacy-consent-lead {
   margin: 0 auto 12px;
-  width: min(560px, calc(100% - 56px));
+  width: min(660px, calc(100% - 56px));
   color: #1f2937;
   font-size: 23px;
   font-weight: 900;
@@ -1324,11 +1324,17 @@ body {
 
 .privacy-consent-note {
   margin: 0 auto 16px;
-  width: min(560px, calc(100% - 56px));
+  width: min(680px, calc(100% - 56px));
   color: #64748b;
   font-size: 17px;
   font-weight: 750;
   line-height: 1.55;
+}
+
+.privacy-consent-line {
+  display: block;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
 
 .privacy-consent-detail-toggle {
