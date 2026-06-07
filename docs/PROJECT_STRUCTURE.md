@@ -209,6 +209,8 @@ backend/serverless/src/
 ├── handler.py
 ├── common.py
 ├── settings.py
+├── artifact_store.py
+├── privacy.py
 ├── sessions.py
 ├── audio.py
 ├── llm.py
@@ -248,7 +250,9 @@ backend/serverless/src/
 
 | 파일 | 역할 |
 | --- | --- |
-| `sessions.py` | DynamoDB session item 생성, 조회, update, queue list |
+| `sessions.py` | DynamoDB 최소 session item 생성, 조회, update, queue list |
+| `artifact_store.py` | S3 artifact 저장·조회, 세션별 key 생성 |
+| `privacy.py` | 접수 정보 최소화, 저장 전 텍스트 가명처리 |
 
 ### 음성 인식
 
@@ -305,10 +309,10 @@ backend/serverless/src/
 
 | 파일 | 역할 |
 | --- | --- |
-| `onepager.py` | 원페이퍼 생성/저장 진입점 |
+| `onepager.py` | S3 문항 artifact 기반 원페이퍼 생성/저장 진입점 |
 | `onepager_sections.py` | 환자 요약, 증상, agenda, transfer text 조립 |
 | `onepager_review.py` | Nova Pro 기반 체크리스트와 EMR 문장 리뷰 |
-| `guide.py` | 환자 안내문 생성 |
+| `guide.py` | 의사 답변 S3 저장과 환자 안내문 생성 |
 | `schemas/review.py` | 원페이퍼 review schema |
 | `schemas/guide.py` | 환자 안내문 schema |
 

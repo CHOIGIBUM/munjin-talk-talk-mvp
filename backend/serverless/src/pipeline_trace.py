@@ -65,7 +65,7 @@ def response_errors(state: AnswerPipelineState) -> list[str]:
 
 
 def persist_final_trace(state: AnswerPipelineState, final_trace: list[dict[str, Any]]) -> None:
-    """DynamoDB 문항 기록에 최종 LangGraph trace를 best-effort로 반영합니다.
+    """S3 문항 artifact에 최종 LangGraph trace를 best-effort로 반영합니다.
 
     `validate_and_save`는 저장 노드 내부에서 호출되므로, 그 시점에는 아직
     `onepaper_refresh`와 `response_payload` 노드가 실행되지 않았습니다. 최종 trace는
@@ -73,8 +73,9 @@ def persist_final_trace(state: AnswerPipelineState, final_trace: list[dict[str, 
     성공 여부를 바꾸지 않도록 조용히 무시합니다.
     """
     try:
-        # sessions는 저장 계층이므로 여기에서 지연 import해 순환 import를 피합니다.
-        from sessions import get_session, update_session
+        # 저장 계층은 여기에서 지연 import해 순환 import를 피합니다.
+        from artifact_store import update_question_trace
+        from sessions import get_session
 
         session_id = state.get("session_id")
         question_id = state.get("question_id")
@@ -85,14 +86,6 @@ def persist_final_trace(state: AnswerPipelineState, final_trace: list[dict[str, 
             return
 
         orchestration = orchestration_snapshot(state, final_trace)
-        responses = dict(session.get("responses") or {})
-        question_results = dict(session.get("question_results") or {})
-        for collection in (responses, question_results):
-            record = dict(collection.get(question_id) or {})
-            if record:
-                record["orchestration"] = orchestration
-                record["pipeline_trace"] = final_trace
-                collection[question_id] = record
-        update_session(session_id, {"responses": responses, "question_results": question_results})
+        update_question_trace(session, question_id, orchestration, final_trace)
     except Exception:
         return

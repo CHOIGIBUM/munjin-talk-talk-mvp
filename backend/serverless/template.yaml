@@ -9,6 +9,9 @@ Parameters:
     Type: String
     Default: MunjinSessions
     Description: Existing DynamoDB table name. Partition key must be session_id.
+  ArtifactsBucketName:
+    Type: String
+    Description: Existing S3 bucket for pseudonymized questionnaire artifacts.
   LambdaRoleArn:
     Type: String
     Description: Existing IAM role ARN for the Lambda function.
@@ -28,6 +31,7 @@ Globals:
       Variables:
         # 세션/STT/LLM/IR 설정은 Lambda 코드가 settings.py에서 읽습니다.
         SESSIONS_TABLE: !Ref SessionsTableName
+        ARTIFACTS_BUCKET: !Ref ArtifactsBucketName
         CUSTOM_VOCABULARY: !Ref CustomVocabularyName
         STRONG_MODEL_ID: apac.amazon.nova-pro-v1:0
         LIGHT_MODEL_ID: apac.amazon.nova-lite-v1:0

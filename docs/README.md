@@ -11,6 +11,7 @@
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | 개발자 | 저장소 구조, 프론트/백엔드 파일별 역할, 수정 위치 |
 | [LANGGRAPH_PIPELINE.md](LANGGRAPH_PIPELINE.md) | 개발자, 평가자 | 환자 답변 1개가 LangGraph 노드에서 처리되는 과정 |
 | [DATA_SCHEMA.md](DATA_SCHEMA.md) | 백엔드 개발자, 데이터 검토자 | DynamoDB item, LLM extraction, matched_slots, onepaper, guide JSON 구조 |
+| [SECURITY_DATA_INVENTORY.md](SECURITY_DATA_INVENTORY.md) | 개발자, 보안 검토자 | DynamoDB/S3 하이브리드 저장 구조와 필드별 보안 처리 기준 |
 | [MVP_SETUP.md](MVP_SETUP.md) | 개발자, 시연 준비자 | 로컬 실행, AWS 백엔드 연결, test 환경 점검 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | 배포 담당자 | Amplify, SAM, DynamoDB, IAM, Bedrock, Transcribe 배포 절차 |
 | [technical-guide.html](technical-guide.html) | 발표자, 평가자 | 브라우저에서 볼 수 있는 시각적 기술 설명 페이지 |
@@ -27,9 +28,10 @@
 2. [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
 3. [LANGGRAPH_PIPELINE.md](LANGGRAPH_PIPELINE.md)
 4. [DATA_SCHEMA.md](DATA_SCHEMA.md)
-5. [MVP_SETUP.md](MVP_SETUP.md)
-6. [DEPLOYMENT.md](DEPLOYMENT.md)
-7. [technical-guide.html](technical-guide.html)
+5. [SECURITY_DATA_INVENTORY.md](SECURITY_DATA_INVENTORY.md)
+6. [MVP_SETUP.md](MVP_SETUP.md)
+7. [DEPLOYMENT.md](DEPLOYMENT.md)
+8. [technical-guide.html](technical-guide.html)
 
 ---
 
@@ -66,13 +68,25 @@
 포함 내용:
 
 - DynamoDB session item
-- `responses.Qx`
+- S3 `answers.redacted.json`
 - LLM extraction schema
 - Hybrid IR `matched_slots`
 - `ir_trace`
 - `onepager`
-- `patient_guide`
+- S3 `patient_guide.redacted.json`
 - Pydantic validation error 구조
+
+### SECURITY_DATA_INVENTORY.md
+
+DynamoDB/S3 하이브리드 보안 구조의 기준 문서입니다.
+
+포함 내용:
+
+- 필드별 기존 위치와 반영 후 저장 위치
+- DynamoDB에 남기는 최소 세션 메타데이터
+- S3 artifact로 이동하는 문진 산출물
+- 저장하지 않는 직접식별정보
+- Macie, Lifecycle, KMS 적용 위치
 
 ### MVP_SETUP.md
 
@@ -116,6 +130,7 @@ AWS 배포 담당자를 위한 절차 문서입니다.
 - 의료 판단처럼 해석될 수 있는 표현을 피합니다.
 - LLM extraction, Hybrid IR, final review, guide generation의 책임을 분리해서 설명합니다.
 - 환자 음성은 S3에 저장하지 않는다는 원칙을 명시합니다.
+- 문진 원문, 원페이퍼, 안내문은 DynamoDB가 아니라 가명처리 S3 artifact로 저장한다는 원칙을 명시합니다.
 - LLM extraction fallback이 제거되어 실패가 조용히 대체되지 않음을 명시합니다.
 - 실제 계정 ID, 실제 API endpoint, 실제 bucket 이름, access key는 문서에 고정하지 않습니다.
 

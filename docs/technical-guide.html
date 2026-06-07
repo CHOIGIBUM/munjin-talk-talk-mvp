@@ -609,7 +609,7 @@
         </div>
         <div class="mini-card">
           <h3>데이터 저장</h3>
-          <p>DynamoDB에는 원페이퍼와 안내문을 포함한 세션 JSON이 저장됩니다. 환자 음성 파일은 S3에 저장하지 않습니다.</p>
+          <p>DynamoDB에는 대기열과 상태, S3 artifact key만 저장됩니다. 원페이퍼와 안내문은 가명처리 후 S3에 저장하며, 환자 음성 파일은 저장하지 않습니다.</p>
         </div>
         <div class="mini-card tint-red">
           <h3>안전 플래그</h3>
@@ -663,7 +663,7 @@
         </div>
         <div class="flow-step tint-green">
           <b>7. 저장 검증</b>
-          <span>Lambda 내부 graph<br />responses.Qx에 누적 저장</span>
+          <span>Lambda 내부 graph<br />S3 artifact 저장 + DDB 상태 갱신</span>
         </div>
         <div class="flow-step tint-green">
           <b>8. 원페이퍼</b>
@@ -747,7 +747,9 @@
 │     ├─ retrieval_documents.py
 │     ├─ retrieval_embeddings.py
 │     ├─ retrieval_scoring.py
-│     ├─ onepager.py      # 원페이퍼/checklist 진입점
+│     ├─ artifact_store.py # S3 artifact 저장소
+│     ├─ privacy.py       # 개인정보 최소화/가명처리
+│     ├─ onepager.py      # S3 답변 기반 원페이퍼 진입점
 │     ├─ onepager_sections.py
 │     ├─ onepager_review.py
 │     ├─ guide.py         # 환자 안내문
@@ -773,7 +775,7 @@
           </div>
           <div class="mini-card tint-teal">
             <h3>백엔드 핵심</h3>
-            <p><code>handler.py</code>는 라우팅, 실제 로직은 <code>sessions.py</code>, <code>audio.py</code>, <code>extraction.py</code>, <code>retrieval.py</code>, <code>onepager.py</code>, <code>guide.py</code>로 나뉩니다.</p>
+            <p><code>handler.py</code>는 라우팅, 실제 로직은 <code>sessions.py</code>, <code>artifact_store.py</code>, <code>privacy.py</code>, <code>audio.py</code>, <code>extraction.py</code>, <code>retrieval.py</code>, <code>onepager.py</code>, <code>guide.py</code>로 나뉩니다.</p>
           </div>
           <div class="mini-card tint-green">
             <h3>IR 데이터</h3>
@@ -908,7 +910,7 @@
           </div>
           <div class="arch-box">
             <strong>S3 artifact bucket</strong>
-            cloudformation 등 배포 산출물 저장, 환자 음성 미저장
+            가명처리 문진 답변, 원페이퍼, 안내문, trace 저장. 환자 음성 원본 미저장
           </div>
           <div class="arch-box">
             <strong>Amazon Transcribe</strong>
@@ -995,7 +997,7 @@
             <td><code>POST /validate</code></td>
             <td>개발/디버그</td>
             <td><code>validate_and_save</code></td>
-            <td><code>responses.Qx</code> 저장, safety flag 반영</td>
+            <td>S3 <code>answers.redacted.json</code> 저장, DynamoDB 상태 반영</td>
           </tr>
           <tr>
             <td><code>GET /doctor/queue</code></td>
@@ -1013,7 +1015,7 @@
             <td><code>POST /doctor-response</code></td>
             <td>의사 답변 저장</td>
             <td><code>save_doctor_response</code></td>
-            <td>doctor_review 저장, patient_guide 생성</td>
+            <td>S3 doctor_review 저장, patient_guide 생성</td>
           </tr>
           <tr>
             <td><code>GET /guide/{id}</code></td>
@@ -1051,7 +1053,7 @@
             <td>음성 인식</td>
             <td>Amazon Transcribe</td>
             <td>브라우저 WebSocket으로 환자 음성을 보내고 텍스트만 수신</td>
-            <td><code>responses.Qx.text</code></td>
+            <td>S3 <code>answers.redacted.json</code></td>
           </tr>
           <tr>
             <td>Q1 의미 분해</td>
@@ -1251,14 +1253,18 @@ symptom_embeddings_...json
   "status": "waiting_tablet | in_progress | completed | needs_priority | staff_help | reviewed",
   "visit_type": "initial | followup",
   "risk": "none | high",
-  "patient": { "...": "환자 기본 정보" },
+  "patient": { "...": "마스킹 환자 표시 정보" },
   "streaming_stt": { "Q1": { "provider": "amazon_transcribe_streaming", "audio_stored": false } },
-  "responses": { "Q1": { "...": "문항별 처리 결과" } },
-  "question_results": { "...": "프론트 호환용 결과" },
-  "onepager": { "...": "의사용 요약" },
-  "doctor_review": { "...": "의사 답변" },
-  "patient_guide": { "...": "환자 안내문" },
-  "safety_flag": { "...": "우선 확인 flag" }
+  "artifact": {
+    "prefix": "sessions/2026-06-08/s_1780.../",
+    "answers_key": ".../answers.redacted.json",
+    "onepaper_key": ".../onepaper.redacted.json",
+    "guide_key": ".../patient_guide.redacted.json"
+  },
+  "question_status": { "Q1": { "answered": true, "matched_count": 2 } },
+  "onepager_ready": true,
+  "guide_ready": false,
+  "safety_flag_summary": { "...": "우선 확인 flag 요약" }
 }</code></pre>
         <div class="mini-card tint-blue">
           <h3>상태값 의미</h3>
@@ -1274,21 +1280,19 @@ symptom_embeddings_...json
       </div>
 
       <h3 class="schema-title">9-2. 환자 기본 정보</h3>
-      <pre><code>"patient": {
+<pre><code>"patient": {
   "name": "김*동",
-  "full_name": "김길동",
-  "birth_date": "1950-09-17",
   "age": 75,
+  "age_band": "70대",
   "gender": "여성",
   "receipt_id": "R-9596",
   "department": "이비인후과",
-  "doctor": "이민우",
-  "phone": "010-0000-0000"
+  "doctor": "이민우"
 }</code></pre>
 
-      <h3 class="schema-title">9-3. 문항별 responses.Qx</h3>
+      <h3 class="schema-title">9-3. S3 answers.redacted.json</h3>
       <div class="schema-grid">
-        <pre><code>"responses": {
+        <pre><code>{
   "Q1": {
     "text": "어제부터 목도 칼칼하고 코막힘도 있어요",
     "spans": [
@@ -1326,7 +1330,8 @@ symptom_embeddings_...json
             <li>LLM extraction JSON에는 <code>score</code>, <code>confidence</code>, <code>probability</code> 같은 임의 수치를 저장하지 않습니다.</li>
             <li>LLM이 임의 수치 필드를 넣으면 <code>extra_forbidden</code> 오류로 retry loop에 들어갑니다.</li>
             <li>원페이퍼 증상 점수는 LLM 값이 아니라 BM25, Titan vector, 표준명 유사도로 계산한 IR 매칭 점수입니다.</li>
-            <li><code>standardized_text</code>는 Q1뿐 아니라 Q2~Q4에도 생성됩니다.</li>
+      <li><code>standardized_text</code>는 Q1뿐 아니라 Q2~Q4에도 생성됩니다.</li>
+      <li>DynamoDB에는 이 문항 원문과 spans가 직접 저장되지 않고 S3 artifact key만 남습니다.</li>
           </ul>
         </div>
       </div>
@@ -1365,8 +1370,8 @@ symptom_embeddings_...json
         </div>
       </div>
 
-      <h3 class="schema-title">9-5. onepager</h3>
-      <pre><code>"onepager": {
+      <h3 class="schema-title">9-5. S3 onepaper.redacted.json</h3>
+      <pre><code>{
   "patient_summary": {
     "display_name": "김*동",
     "age_text": "75세",
@@ -1402,7 +1407,7 @@ symptom_embeddings_...json
         “의사가 다음에 확인하거나 답해야 할 task”로 생성합니다.
       </div>
 
-      <h3 class="schema-title">9-6. doctor_review와 patient_guide</h3>
+      <h3 class="schema-title">9-6. S3 doctor_review와 patient_guide</h3>
       <div class="schema-grid">
         <pre><code>"doctor_review": {
   "reviewer_id": "doctor",
@@ -1506,7 +1511,7 @@ EMBEDDING_DIMENSIONS=512</code></pre>
           </tr>
           <tr>
             <td>원문 quote가 이상함</td>
-            <td>DynamoDB <code>responses.Qx</code></td>
+            <td>S3 <code>answers.redacted.json</code></td>
             <td><code>source_quote</code>, <code>original_quote</code>, <code>llm_meta.validation_errors</code></td>
           </tr>
           <tr>
@@ -1526,8 +1531,8 @@ EMBEDDING_DIMENSIONS=512</code></pre>
           </tr>
           <tr>
             <td>안내문이 원문 그대로임</td>
-            <td><code>patient_guide</code></td>
-            <td><code>generation_method</code>, <code>doctor_review.answers</code>, <code>additional_notes</code></td>
+            <td>S3 <code>patient_guide.redacted.json</code></td>
+            <td><code>generation_method</code>, S3 <code>doctor_review.redacted.json</code>, <code>additional_notes</code></td>
           </tr>
         </tbody>
       </table>
@@ -1543,7 +1548,7 @@ EMBEDDING_DIMENSIONS=512</code></pre>
         </div>
         <div class="mini-card tint-green">
           <h3>데이터 확인</h3>
-          <p>DynamoDB item의 <code>responses</code>, <code>onepager</code>, <code>patient_guide</code>를 직접 봅니다.</p>
+          <p>DynamoDB item은 상태와 artifact key만 보고, 실제 답변/원페이퍼/안내문은 S3 redacted JSON을 봅니다.</p>
         </div>
       </div>
     </section>
@@ -1557,7 +1562,7 @@ EMBEDDING_DIMENSIONS=512</code></pre>
       </div>
       <div class="mini-card tint-green">
         <h3>
-          문진톡톡은 환자 발화 텍스트를 session JSON으로 구조화하고, 그 JSON을 기반으로 의사에게는 확인할 task를,
+          문진톡톡은 환자 발화 텍스트를 가명처리 artifact JSON으로 구조화하고, 그 JSON을 기반으로 의사에게는 확인할 task를,
           환자에게는 쉬운 안내문을 제공하는 AWS 서버리스 문진 MVP입니다.
         </h3>
       </div>

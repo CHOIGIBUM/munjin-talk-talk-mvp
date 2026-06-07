@@ -11,6 +11,7 @@ React/Vite frontend
   -> API Gateway HTTP API
   -> Lambda Python 3.12
   -> DynamoDB session table
+  -> S3 artifact bucket
   -> Amazon Transcribe Streaming
   -> Amazon Bedrock Nova Pro/Lite
   -> Amazon Titan Text Embeddings
@@ -21,6 +22,8 @@ React/Vite frontend
 - 환자 음성 파일은 S3에 저장하지 않습니다.
 - 프론트엔드는 Transcribe Streaming WebSocket으로 음성을 직접 전송합니다.
 - 백엔드는 최종 transcript 텍스트만 받아 LLM, validation, IR, onepaper 처리를 수행합니다.
+- 문진 답변, 원페이퍼, 의사 답변, 환자 안내문은 가명처리 후 S3 artifact로 저장합니다.
+- DynamoDB에는 대기열, 상태, 마스킹 환자명, S3 key만 저장합니다.
 - LLM JSON은 Pydantic schema와 source_quote 검증을 통과해야 저장됩니다.
 - 의료진 UI에 숫자형 증상 confidence를 표시하지 않습니다. IR 점수는 내부 trace로만 남깁니다.
 
@@ -36,6 +39,8 @@ backend/serverless/
     ├── handler.py
     ├── common.py
     ├── settings.py
+    ├── artifact_store.py
+    ├── privacy.py
     ├── sessions.py
     ├── audio.py
     ├── llm.py
@@ -98,7 +103,9 @@ backend/serverless/
 | `handler.py` | Lambda entrypoint. API Gateway method/path 라우팅 |
 | `common.py` | 과거 import 호환용 facade |
 | `settings.py` | 환경 변수, 모델 ID, AWS client, 데이터 경로 |
-| `sessions.py` | DynamoDB session 저장·조회·queue 변환 |
+| `artifact_store.py` | S3 artifact 저장·조회 |
+| `privacy.py` | 개인정보 최소화와 저장 전 가명처리 |
+| `sessions.py` | DynamoDB 최소 session 상태 저장·조회·queue 변환 |
 
 ### 음성 인식
 
@@ -197,12 +204,31 @@ session_id (String)
 - 테스트 환경과 운영 환경 테이블 분리
 - 실제 환자 데이터 사용 전 TTL 또는 삭제 정책 설정
 
+### S3 artifact bucket
+
+문진 답변, 원페이퍼, 의사 답변, 환자 안내문, trace는 S3에 저장합니다.
+
+권장:
+
+- Block Public Access 활성화
+- 기본 암호화 활성화
+- Lifecycle 3일 삭제
+- Macie 민감정보 탐지 연결
+- Lambda role만 `GetObject`, `PutObject` 허용
+
+저장 prefix:
+
+```text
+sessions/YYYY-MM-DD/{session_id}/
+```
+
 ### IAM Role
 
 Lambda execution role에는 최소한 다음 권한이 필요합니다.
 
 - CloudWatch Logs 작성
 - DynamoDB `GetItem`, `PutItem`, `UpdateItem`, `Scan`
+- S3 artifact bucket `GetObject`, `PutObject`
 - Bedrock `InvokeModel`
 - Transcribe Streaming `StartStreamTranscriptionWebSocket`
 - SAM artifact bucket 접근
@@ -228,6 +254,7 @@ amazon.titan-embed-text-v2:0
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `SESSIONS_TABLE` | `MunjinSessions` | DynamoDB 세션 테이블 |
+| `ARTIFACTS_BUCKET` | 없음 | 가명처리 문진 산출물을 저장하는 S3 bucket |
 | `CUSTOM_VOCABULARY` | 빈 값 | Transcribe custom vocabulary |
 | `STRONG_MODEL_ID` | `apac.amazon.nova-pro-v1:0` | 고난도 extraction |
 | `LIGHT_MODEL_ID` | `apac.amazon.nova-lite-v1:0` | 저난도 extraction |
@@ -296,6 +323,7 @@ sam deploy --guided
 Stack Name: munjin-mvp-backend-test
 AWS Region: ap-northeast-2
 Parameter SessionsTableName: MunjinSessionsTest
+Parameter ArtifactsBucketName: munjin-mvp-test-artifacts-...
 Parameter LambdaRoleArn: arn:aws:iam::<account-id>:role/<lambda-role-name>
 Parameter CustomVocabularyName:
 Confirm changes before deploy: y
@@ -393,6 +421,8 @@ console.log(JSON.stringify({
 - `spans`에 원문 quote 존재
 - `matched_slots`에 표준 증상 매칭 결과 존재
 - `active_path`에 `response_payload` 포함
+- DynamoDB item에는 `responses`, `onepager`, `patient_guide`, `doctor_review`, `patient.full_name`, `patient.birth_date`, `patient.phone`이 없어야 함
+- S3 artifact bucket에는 `answers.redacted.json`, `onepaper.redacted.json`, `llm_trace.redacted.json`이 생성되어야 함
 
 ---
 

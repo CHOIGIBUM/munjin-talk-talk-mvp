@@ -13,7 +13,7 @@ frontend/
   React + Vite 화면
 
 backend/serverless/
-  AWS API Gateway + Lambda + DynamoDB + Bedrock + Transcribe
+  AWS API Gateway + Lambda + DynamoDB + S3 artifact + Bedrock + Transcribe
 ```
 
 실행 방식은 두 가지입니다.
@@ -21,7 +21,7 @@ backend/serverless/
 | 방식 | 용도 | 백엔드 필요 여부 |
 | --- | --- | --- |
 | UI 목업 모드 | 화면 레이아웃만 확인 | 필요 없음 |
-| 실제 MVP 모드 | STT, LLM, IR, DynamoDB까지 확인 | AWS 백엔드 필요 |
+| 실제 MVP 모드 | STT, LLM, IR, DynamoDB/S3 저장까지 확인 | AWS 백엔드 필요 |
 
 실제 기능 검증은 반드시 실제 MVP 모드로 해야 합니다.
 
@@ -109,13 +109,13 @@ VITE_API_BASE_URL=https://<api-id>.execute-api.ap-northeast-2.amazonaws.com
 
 이때 동작:
 
-- 접수처 세션 생성: DynamoDB 저장
+- 접수처 세션 생성: DynamoDB 최소 세션 저장
 - 환자 음성 인식: Transcribe Streaming
 - 답변 처리: Lambda LangGraph 파이프라인
 - LLM extraction: Bedrock Nova
 - 증상 매칭: BM25 + Titan Vector
-- 원페이퍼 조회: DynamoDB + review LLM
-- 안내문 조회: guide LLM 또는 저장된 guide
+- 원페이퍼 조회: S3 onepaper artifact
+- 안내문 조회: S3 guide artifact
 
 ---
 
@@ -149,7 +149,7 @@ $env:Path='<python-3.12-dir>;<python-3.12-scripts-dir>;' + $env:Path
   --capabilities CAPABILITY_IAM `
   --no-confirm-changeset `
   --no-fail-on-empty-changeset `
-  --parameter-overrides "SessionsTableName=MunjinSessionsTest LambdaRoleArn=<lambda-role-arn> CustomVocabularyName=unused"
+  --parameter-overrides "SessionsTableName=MunjinSessionsTest ArtifactsBucketName=<s3-artifact-bucket-name> LambdaRoleArn=<lambda-role-arn> CustomVocabularyName=unused"
 ```
 
 ---
@@ -350,16 +350,16 @@ console.log(JSON.stringify({
 
 확인:
 
-- `responses.Qx.spans`가 비어 있는지
-- `matched_slots`가 비어 있는지
-- `ir_trace`에 reject reason이 있는지
+- S3 `answers.redacted.json`의 `Qx.spans`가 비어 있는지
+- S3 `answers.redacted.json`의 `matched_slots`가 비어 있는지
+- S3 `answers.redacted.json` 또는 trace artifact의 `ir_trace`에 reject reason이 있는지
 - Q type이 증상 문항인지
 
 ### 안내문에 의사 강조사항이 이상함
 
 확인:
 
-- `doctor_review.patient_instruction` 또는 관련 저장 필드 확인
+- S3 `doctor_review.redacted.json`의 `patient_instruction` 확인
 - 의사 강조사항은 원문 그대로 표시되어야 함
 - guide LLM이 강조사항을 새로 바꾸지 않도록 프론트 표시 경로 확인
 
@@ -372,6 +372,7 @@ console.log(JSON.stringify({
 정리 대상:
 
 - DynamoDB `MunjinSessionsTest` item
+- S3 artifact bucket의 `sessions/` 객체
 - CloudWatch Lambda log stream
 - SAM artifact bucket 오래된 객체
 - Transcribe 작업 기록

@@ -15,6 +15,7 @@ GitHub repository
   -> API Gateway HTTP API
   -> Lambda Python backend
   -> DynamoDB
+  -> S3 redacted artifact bucket
   -> Amazon Transcribe Streaming
   -> Amazon Bedrock
 ```
@@ -30,7 +31,8 @@ GitHub repository
 | 백엔드 stack name | `munjin-mvp-backend-test` | CloudFormation stack 이름 |
 | DynamoDB table | `MunjinSessionsTest` | 세션 저장 테이블 |
 | Lambda role | `munjin-lambda-role` | Lambda 실행 role |
-| Artifact bucket | `<artifact-bucket-name>` | SAM/임시 artifact bucket |
+| S3 artifact bucket | `<artifact-bucket-name>` | 가명처리 문진 산출물 저장 bucket |
+| SAM deploy bucket | 자동 생성 또는 별도 bucket | SAM/CloudFormation 배포 산출물 저장 |
 
 ---
 
@@ -72,8 +74,11 @@ S3
 
 용도:
 
-- SAM 배포 artifact
-- CloudFormation 임시 산출물
+- 가명처리된 문진 답변 JSON
+- 원페이퍼 JSON
+- 의사 답변 JSON
+- 환자 안내문 JSON
+- LLM/검증 trace JSON
 
 중요:
 
@@ -94,7 +99,7 @@ Lambda execution role에 필요한 권한:
 - DynamoDB read/write
 - Bedrock `InvokeModel`
 - Transcribe Streaming
-- S3 artifact bucket 접근
+- S3 artifact bucket `GetObject`, `PutObject`
 
 개발 편의상 넓은 권한으로 시작했더라도, 공개 테스트 전에는 resource ARN을 좁히는 것이 좋습니다.
 
@@ -133,6 +138,7 @@ sam deploy --guided
 Stack Name: munjin-mvp-backend-test
 AWS Region: ap-northeast-2
 Parameter SessionsTableName: MunjinSessionsTest
+Parameter ArtifactsBucketName: <s3-artifact-bucket-name>
 Parameter LambdaRoleArn: arn:aws:iam::<account-id>:role/<lambda-role-name>
 Parameter CustomVocabularyName:
 Confirm changes before deploy: y

@@ -10,7 +10,7 @@ keeps the original import surface stable for handler.py and old scripts.
 from audio import generate_streaming_transcribe_url
 from extraction import extract_question
 from guide import get_guide, save_doctor_response
-from onepager import build_onepager, validate_and_save
+from onepager import build_onepager, get_onepager_payload, validate_and_save
 from orchestration import process_answer
 from retrieval import match_slots
 from sessions import create_session, get_session, list_sessions, public_session, save_patient_consent, update_session
@@ -22,6 +22,7 @@ __all__ = [
     "extract_question",
     "generate_streaming_transcribe_url",
     "get_guide",
+    "get_onepager_payload",
     "get_session",
     "list_sessions",
     "match_slots",

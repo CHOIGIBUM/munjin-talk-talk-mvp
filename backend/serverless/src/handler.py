@@ -14,6 +14,7 @@ from common import (
     extract_question,
     generate_streaming_transcribe_url,
     get_guide,
+    get_onepager_payload,
     get_session,
     list_sessions,
     match_slots,
@@ -56,7 +57,7 @@ def route(method, path, event):
         session = get_session(unquote_plus(match.group(1)))
         if not session:
             return response(404, {"error": "session_not_found"})
-        return response(200, public_session(session))
+        return response(200, public_session(session, include_artifacts=True))
 
     match = re.fullmatch(r"/sessions/([^/]+)/staff-help", path)
     if method == "POST" and match:
@@ -101,17 +102,7 @@ def route(method, path, event):
         session = get_session(session_id)
         if not session:
             return response(404, {"error": "session_not_found"})
-        onepager = build_onepager(session)
-        update_session(session_id, {"onepager": onepager})
-        return response(200, {
-            "session": {
-                "session_id": session_id,
-                "case_id": session_id,
-                "visit_type": session.get("visit_type", "initial"),
-                "responses": session.get("responses", {}),
-                "onepager": onepager,
-            }
-        })
+        return response(200, get_onepager_payload(session))
 
     if method == "POST" and path == "/doctor-response":
         payload, err = save_doctor_response(body)

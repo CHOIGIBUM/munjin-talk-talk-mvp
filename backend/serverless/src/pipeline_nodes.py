@@ -208,7 +208,7 @@ def hybrid_ir_match_node(state: AnswerPipelineState) -> dict[str, Any]:
 
 
 def session_validation_save_node(state: AnswerPipelineState) -> dict[str, Any]:
-    """검증된 문항 결과를 DynamoDB에 저장하고 onepaper를 갱신합니다."""
+    """검증된 문항 결과를 S3 artifact에 저장하고 DynamoDB 상태를 갱신합니다."""
     extracted = state.get("extracted") or {}
     matched = state.get("matched") or {"matched_slots": [], "unmatched_spans": []}
     save_trace = next_trace_entry(
