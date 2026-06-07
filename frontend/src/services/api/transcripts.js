@@ -1,16 +1,6 @@
 import { API_BASE_URL, ensureApiConfigured, sleep, useMockApi } from './client.js'
 import { mockProcessResponse } from './mockResponses.js'
 
-// Patient audio must not be stored in S3. These legacy helpers are kept only so
-// old imports fail clearly instead of silently uploading protected voice data.
-export async function uploadAudio() {
-  throw new Error('audio_storage_disabled')
-}
-
-export async function getTranscript() {
-  throw new Error('batch_transcribe_disabled')
-}
-
 // Submit the already-streamed transcript to the backend orchestration graph.
 // The backend runs Bedrock extraction, schema validation, symptom IR, session
 // save, and onepaper refresh in a single server-side pipeline.

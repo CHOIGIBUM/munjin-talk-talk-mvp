@@ -133,7 +133,6 @@ sam deploy --guided
 Stack Name: munjin-mvp-backend-test
 AWS Region: ap-northeast-2
 Parameter SessionsTableName: MunjinSessionsTest
-Parameter ArtifactsBucketName: <artifact-bucket-name>
 Parameter LambdaRoleArn: arn:aws:iam::<account-id>:role/<lambda-role-name>
 Parameter CustomVocabularyName:
 Confirm changes before deploy: y

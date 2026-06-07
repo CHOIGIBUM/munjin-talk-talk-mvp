@@ -168,7 +168,7 @@ $env:Path='<python-3.12-dir>;<python-3.12-scripts-dir>;' + $env:Path
   --capabilities CAPABILITY_IAM `
   --no-confirm-changeset `
   --no-fail-on-empty-changeset `
-  --parameter-overrides "SessionsTableName=MunjinSessionsTest ArtifactsBucketName=<bucket-name> LambdaRoleArn=<lambda-role-arn> CustomVocabularyName=unused"
+  --parameter-overrides "SessionsTableName=MunjinSessionsTest LambdaRoleArn=<lambda-role-arn> CustomVocabularyName=unused"
 ```
 
 ---

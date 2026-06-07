@@ -31,7 +31,6 @@ backend/
 └── serverless/
     ├── README.md
     ├── template.yaml
-    ├── s3-cors.json
     └── src/
         ├── handler.py
         ├── common.py

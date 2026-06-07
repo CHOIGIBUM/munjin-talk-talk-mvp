@@ -202,7 +202,6 @@ backend/
     ├── README.md
     ├── template.yaml
     ├── samconfig.toml
-    ├── s3-cors.json
     └── src/
 ```
 

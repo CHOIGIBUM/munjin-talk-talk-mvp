@@ -14,8 +14,6 @@ export {
 } from './api/sessions.js'
 
 export {
-  uploadAudio,
-  getTranscript,
   processTranscript,
 } from './api/transcripts.js'
 

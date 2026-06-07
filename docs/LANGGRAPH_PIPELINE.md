@@ -114,7 +114,6 @@ LangGraph 상태 타입과 그래프 설명을 담습니다.
 포함 내용:
 
 - `run_answer_pipeline()`
-- `pipeline_graph_description()`
 - `route_after_required_input()`
 - `route_after_schema_validation()`
 - `route_after_save()`

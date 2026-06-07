@@ -14,7 +14,6 @@ from botocore.config import Config
 # 배포 리전과 AWS 리소스 이름은 SAM template/env에서 주입됩니다.
 REGION = os.environ.get("AWS_REGION", "ap-northeast-2")
 TABLE_NAME = os.environ.get("SESSIONS_TABLE", "MunjinSessions")
-ARTIFACT_BUCKET = os.environ.get("ARTIFACT_BUCKET", "")
 CUSTOM_VOCABULARY = os.environ.get("CUSTOM_VOCABULARY", "")
 USE_BEDROCK_LLM = os.environ.get("USE_BEDROCK_LLM", "true").lower() == "true"
 ALLOW_RULE_FALLBACK = os.environ.get("ALLOW_RULE_FALLBACK", "false").lower() == "true"

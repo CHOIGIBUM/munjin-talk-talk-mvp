@@ -7,7 +7,7 @@ keeps the original import surface stable for handler.py and old scripts.
 즉, 새 로직은 여기에 추가하지 말고 각 역할 모듈에 추가합니다.
 """
 
-from audio import generate_streaming_transcribe_url, generate_upload_url, get_or_start_transcript
+from audio import generate_streaming_transcribe_url
 from extraction import extract_question
 from guide import get_guide, save_doctor_response
 from onepager import build_onepager, validate_and_save
@@ -20,10 +20,8 @@ __all__ = [
     "build_onepager",
     "create_session",
     "extract_question",
-    "generate_upload_url",
     "generate_streaming_transcribe_url",
     "get_guide",
-    "get_or_start_transcript",
     "get_session",
     "list_sessions",
     "match_slots",

@@ -32,7 +32,6 @@ React/Vite frontend
 backend/serverless/
 ├── README.md
 ├── template.yaml
-├── s3-cors.json
 └── src/
     ├── handler.py
     ├── common.py
@@ -87,12 +86,7 @@ backend/serverless/
 | `POST` | `/doctor-response` | 의사 답변과 환자 강조사항 저장 |
 | `GET` | `/guide/{session_id}` | 환자 안내문 조회 |
 
-과거 배치형 STT 호환 endpoint:
-
-| Method | Path | 현재 상태 |
-| --- | --- | --- |
-| `POST` | `/upload-url` | 환자 음성 저장 금지 원칙에 따라 실제 문진 경로에서는 사용하지 않음 |
-| `GET` | `/transcribe-result` | 과거 호환용. 실제 문진 경로에서는 사용하지 않음 |
+저장형 음성 업로드와 배치 Transcribe 조회 endpoint는 제거했습니다. 현재 문진 음성은 `/transcribe-stream-url`로 발급받은 Transcribe Streaming WebSocket에서만 처리합니다.
 
 ---
 
@@ -216,10 +210,6 @@ Lambda execution role에는 최소한 다음 권한이 필요합니다.
 
 공개 운영 전에는 resource ARN을 환경별로 좁혀야 합니다.
 
-### S3
-
-`ArtifactsBucketName`은 환자 음성 저장소가 아닙니다. SAM/CloudFormation 배포 artifact 또는 제한적 임시 산출물 용도입니다.
-
 ### Bedrock model access
 
 배포 region에서 다음 모델 권한을 확인합니다.
@@ -239,7 +229,6 @@ amazon.titan-embed-text-v2:0
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `SESSIONS_TABLE` | `MunjinSessions` | DynamoDB 세션 테이블 |
-| `ARTIFACT_BUCKET` | 배포 parameter | SAM artifact bucket |
 | `CUSTOM_VOCABULARY` | 빈 값 | Transcribe custom vocabulary |
 | `USE_BEDROCK_LLM` | `true` | Bedrock LLM extraction 사용 |
 | `ALLOW_RULE_FALLBACK` | `false` | LLM 실패 시 rule fallback 허용 |
@@ -313,7 +302,6 @@ sam deploy --guided
 Stack Name: munjin-mvp-backend-test
 AWS Region: ap-northeast-2
 Parameter SessionsTableName: MunjinSessionsTest
-Parameter ArtifactsBucketName: <artifact-bucket-name>
 Parameter LambdaRoleArn: arn:aws:iam::<account-id>:role/<lambda-role-name>
 Parameter CustomVocabularyName:
 Confirm changes before deploy: y
