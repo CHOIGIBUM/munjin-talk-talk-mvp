@@ -194,11 +194,11 @@ backend/
 └── serverless/
     ├── README.md
     ├── template.yaml
-    ├── samconfig.toml
     └── src/
 ```
 
 현재 백엔드는 `serverless/`만 배포 대상입니다.
+`samconfig.toml`과 `.aws-sam/`은 SAM CLI가 로컬에서 만드는 배포 설정과 build 산출물이므로 Git에 포함하지 않습니다.
 
 ---
 
@@ -207,8 +207,9 @@ backend/
 ```text
 backend/serverless/src/
 ├── handler.py
-├── common.py
 ├── settings.py
+├── artifact_store.py
+├── privacy.py
 ├── sessions.py
 ├── audio.py
 ├── llm.py
@@ -218,7 +219,7 @@ backend/serverless/src/
 ├── pipeline_nodes.py
 ├── pipeline_state.py
 ├── pipeline_trace.py
-├── extraction.py
+├── rag_context.py
 ├── extraction_prompts.py
 ├── extraction_schema.py
 ├── retrieval.py
@@ -240,7 +241,6 @@ backend/serverless/src/
 | 파일 | 역할 |
 | --- | --- |
 | `handler.py` | Lambda entrypoint. HTTP route 정의 |
-| `common.py` | 예전 import 호환용 facade |
 | `settings.py` | 환경 변수, AWS client, 모델 ID, 데이터 경로 |
 | `utils.py` | 응답, 시간, 텍스트 정리 공통 함수 |
 
@@ -248,7 +248,9 @@ backend/serverless/src/
 
 | 파일 | 역할 |
 | --- | --- |
-| `sessions.py` | DynamoDB session item 생성, 조회, update, queue list |
+| `sessions.py` | DynamoDB 최소 session item 생성, 조회, update, queue list |
+| `artifact_store.py` | S3 artifact 저장·조회, 세션별 key 생성 |
+| `privacy.py` | 접수 정보 최소화, 저장 전 텍스트 가명처리 |
 
 ### 음성 인식
 
@@ -263,7 +265,7 @@ backend/serverless/src/
 | 파일 | 역할 |
 | --- | --- |
 | `llm.py` | Bedrock Runtime 호출 |
-| `langchain_prompting.py` | LangChain Core 기반 message 조립 |
+| `langchain_prompting.py` | LangChain Core 기반 PromptTemplate, Bedrock Runnable, JSON parser chain |
 | `extraction_prompts.py` | extraction prompt와 Q별 모델 라우팅 |
 
 ### LangGraph 파이프라인
@@ -274,20 +276,21 @@ backend/serverless/src/
 | `pipeline_graph.py` | LangGraph 조립, 노드 연결, 조건 분기 |
 | `pipeline_nodes.py` | 실제 노드 구현 |
 | `pipeline_state.py` | 상태 타입과 그래프 메타데이터 |
-| `pipeline_trace.py` | trace와 orchestration snapshot 저장 |
+| `pipeline_trace.py` | LangGraph active path와 최소 trace helper |
+| `rag_context.py` | extraction 앞단에서 원천 JSON/alias 기반 RAG 참고 문맥 검색 |
 
 이렇게 나눈 이유:
 
 - `pipeline_graph.py`를 읽으면 전체 흐름만 보이게 하기 위해
 - `pipeline_nodes.py`를 읽으면 각 단계의 처리만 보이게 하기 위해
 - `pipeline_state.py`에서 저장되는 상태 shape을 한눈에 보기 위해
-- `pipeline_trace.py`에서 설명 가능성 관련 로직을 분리하기 위해
+- `pipeline_trace.py`에서 설명 가능성 관련 최소 trace 로직을 분리하기 위해
 
 ### Extraction과 검증
 
 | 파일 | 역할 |
 | --- | --- |
-| `extraction.py` | Bedrock extraction 실행과 retry loop |
+| `extraction_prompts.py` | 문항별 Bedrock extraction prompt와 모델 라우팅 |
 | `extraction_schema.py` | runtime 보강, quote grounding, 문항 단위 검증 |
 | `schemas/extraction.py` | Pydantic fixed schema |
 
@@ -305,10 +308,10 @@ backend/serverless/src/
 
 | 파일 | 역할 |
 | --- | --- |
-| `onepager.py` | 원페이퍼 생성/저장 진입점 |
+| `onepager.py` | S3 문항 artifact 기반 원페이퍼 생성/저장 진입점 |
 | `onepager_sections.py` | 환자 요약, 증상, agenda, transfer text 조립 |
 | `onepager_review.py` | Nova Pro 기반 체크리스트와 EMR 문장 리뷰 |
-| `guide.py` | 환자 안내문 생성 |
+| `guide.py` | 의사 답변 S3 저장과 환자 안내문 생성 |
 | `schemas/review.py` | 원페이퍼 review schema |
 | `schemas/guide.py` | 환자 안내문 schema |
 
@@ -341,6 +344,7 @@ backend/serverless/src/data/
 | Lambda 환경 변수 추가 | `template.yaml`, `settings.py` |
 | 질문 문구 수정 | `frontend/src/config/questions.js` |
 | Bedrock prompt 수정 | `extraction_prompts.py`, `onepager_review.py`, `guide.py` |
+| RAG 참고 문맥 수정 | `rag_context.py`, `retrieval_documents.py`, `clinical_terms.py` |
 | LLM JSON schema 수정 | `schemas/extraction.py`, `schemas/review.py`, `schemas/guide.py` |
 | source_quote 검증 수정 | `schemas/extraction.py`, `extraction_schema.py` |
 | LangGraph 노드 추가 | `pipeline_state.py`, `pipeline_nodes.py`, `pipeline_graph.py` |

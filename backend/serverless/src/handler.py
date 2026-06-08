@@ -8,24 +8,12 @@
 import re
 from urllib.parse import unquote_plus
 
-from common import (
-    build_onepager,
-    create_session,
-    extract_question,
-    generate_streaming_transcribe_url,
-    get_guide,
-    get_session,
-    list_sessions,
-    match_slots,
-    parse_body,
-    process_answer,
-    public_session,
-    response,
-    save_doctor_response,
-    save_patient_consent,
-    update_session,
-    validate_and_save,
-)
+from audio import generate_streaming_transcribe_url
+from guide import get_guide, save_doctor_response
+from onepager import get_onepager_payload, rerun_onepager_review
+from orchestration import process_answer
+from sessions import create_session, get_session, list_sessions, public_session, save_patient_consent, update_session
+from utils import parse_body, response
 
 
 def handler(event, context):
@@ -56,7 +44,7 @@ def route(method, path, event):
         session = get_session(unquote_plus(match.group(1)))
         if not session:
             return response(404, {"error": "session_not_found"})
-        return response(200, public_session(session))
+        return response(200, public_session(session, include_artifacts=True))
 
     match = re.fullmatch(r"/sessions/([^/]+)/staff-help", path)
     if method == "POST" and match:
@@ -78,18 +66,8 @@ def route(method, path, event):
         payload, err = generate_streaming_transcribe_url(body)
         return err or response(200, payload)
 
-    if method == "POST" and path == "/extract":
-        return response(200, extract_question(body))
-
     if method == "POST" and path == "/process-answer":
         payload, err = process_answer(body)
-        return err or response(200, payload)
-
-    if method == "POST" and path == "/match":
-        return response(200, match_slots(body))
-
-    if method == "POST" and path == "/validate":
-        payload, err = validate_and_save(body)
         return err or response(200, payload)
 
     if method == "GET" and path == "/doctor/queue":
@@ -101,17 +79,12 @@ def route(method, path, event):
         session = get_session(session_id)
         if not session:
             return response(404, {"error": "session_not_found"})
-        onepager = build_onepager(session)
-        update_session(session_id, {"onepager": onepager})
-        return response(200, {
-            "session": {
-                "session_id": session_id,
-                "case_id": session_id,
-                "visit_type": session.get("visit_type", "initial"),
-                "responses": session.get("responses", {}),
-                "onepager": onepager,
-            }
-        })
+        return response(200, get_onepager_payload(session))
+
+    match = re.fullmatch(r"/onepager/([^/]+)/review", path)
+    if method == "POST" and match:
+        payload, err = rerun_onepager_review(unquote_plus(match.group(1)))
+        return err or response(200, payload)
 
     if method == "POST" and path == "/doctor-response":
         payload, err = save_doctor_response(body)

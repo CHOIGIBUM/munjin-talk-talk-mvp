@@ -14,7 +14,7 @@ export const SENSITIVE_NOTICE_ITEMS = [
   '환자가 의사에게 묻고 싶은 질문과 진료 후 안내 내용',
 ]
 
-export const RETENTION_NOTICE = 'MVP 시연 및 검증 목적의 세션 데이터는 최대 3일 보관 후 삭제하는 정책을 적용합니다.'
+export const RETENTION_NOTICE = '문진 서비스 제공에 필요한 세션 데이터는 최대 3일 보관 후 삭제하는 정책을 적용합니다.'
 
 // 환자 태블릿 진입 전 보여주는 앱형 동의 팝업입니다.
 // 핵심 문구는 짧고 크게, 법정 고지에 가까운 상세 내용은 [전문보기] 안에 둡니다.

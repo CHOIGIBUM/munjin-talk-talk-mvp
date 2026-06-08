@@ -1,23 +1,27 @@
-"""Patient guide generation after physician review.
+"""의사 답변 저장과 환자 안내문 생성.
 
-의사가 원페이퍼에서 환자 질문에 답하면 Nova Lite가 어르신이 읽기 쉬운 안내문으로
-재작성합니다. 의사가 직접 남긴 강조사항은 LLM이 바꾸지 않고 별도 카드에 그대로
-표시합니다. LLM 안내문이 schema/품질 검증을 통과하지 못하면 rule-base 문장을 대신
-만들지 않고 validator 실패로 드러냅니다.
+의사가 입력한 답변과 환자 안내문은 건강정보가 포함될 수 있으므로
+DynamoDB에 직접 저장하지 않습니다. S3 artifact로 저장하고, DynamoDB에는
+검토 완료 상태와 artifact key만 남깁니다.
 """
+
+from __future__ import annotations
 
 import hashlib
 import json
+from typing import Any
 
-from llm import call_bedrock_json
+from artifact_store import DOCTOR_REVIEW_FILE, GUIDE_FILE, ONEPAPER_FILE, get_json, put_json
+from artifact_policy import prepare_artifact_payload
+from llm import call_bedrock_json_with_meta
 from schemas.guide import validate_guide_payload
 from sessions import get_session, update_session
 from settings import GUIDE_MAX_TOKENS, GUIDE_MODEL_ID
 from utils import clean_quote, compact_ir, json_default, normalize_text, now_iso, response
 
 
-def save_doctor_response(body):
-    """`POST /doctor-response` 진입점. 의사 답변 저장 후 안내문 생성을 시도합니다."""
+def save_doctor_response(body: dict[str, Any]):
+    """의사 답변을 S3에 저장하고 환자 안내문 생성을 시도합니다."""
     session_id = body.get("session_id") or body.get("sessionId")
     session = get_session(session_id)
     if not session:
@@ -31,7 +35,8 @@ def save_doctor_response(body):
         or body.get("additionalNotes")
         or ""
     )
-    guide = generate_patient_guide(session, answers, patient_instruction)
+    onepager = get_json(session, ONEPAPER_FILE, default={}) or {}
+    guide = generate_patient_guide(session, onepager, answers, patient_instruction)
     validator_passed = not answers or bool(guide.get("items"))
 
     doctor_review = {
@@ -40,21 +45,33 @@ def save_doctor_response(body):
         "additional_notes": patient_instruction,
         "reviewed_at": now_iso(),
     }
+    put_json(session, DOCTOR_REVIEW_FILE, doctor_review)
+    put_json(session, GUIDE_FILE, guide)
+    response_guide = prepare_artifact_payload(GUIDE_FILE, guide)
+
     update_session(session_id, {
-        "doctor_review": doctor_review,
-        "patient_guide": guide,
+        "guide_ready": bool(guide.get("items") or patient_instruction),
+        "reviewed_at": doctor_review["reviewed_at"],
         "status": "reviewed",
     })
     return {
         "doctor_review_saved": True,
         "patient_guide_generated": bool(guide.get("items")),
+        "guide_generation_valid": validator_passed,
+        "guide_validator_passed": validator_passed,
+        # 이전 프론트와의 호환성을 위해 남기지만, 신규 UI에서는 환자 문진 validator와 혼동하지 않습니다.
         "validator_passed": validator_passed,
-        "patient_guide": guide,
+        "patient_guide": response_guide,
     }, None
 
 
-def generate_patient_guide(session, answers, patient_instruction):
-    """Nova Lite 안내문을 만들고, 실패하면 빈 안내문과 실패 이유만 저장합니다."""
+def generate_patient_guide(
+    session: dict[str, Any],
+    onepager: dict[str, Any],
+    answers: list[dict[str, Any]],
+    patient_instruction: str,
+) -> dict[str, Any]:
+    """Nova Lite 안내문을 만들고, 실패하면 빈 안내문과 실패 이유만 반환합니다."""
     if not answers:
         return {
             "generated_at": now_iso(),
@@ -63,7 +80,7 @@ def generate_patient_guide(session, answers, patient_instruction):
             "generation_method": "no_patient_question_answers",
         }
     try:
-        guide = generate_patient_guide_bedrock(session, answers, patient_instruction)
+        guide = generate_patient_guide_bedrock(session, onepager, answers, patient_instruction)
         if is_patient_guide_usable(guide, answers):
             guide["generation_method"] = "bedrock_nova_lite_grounded"
             return guide
@@ -80,37 +97,61 @@ def generate_patient_guide(session, answers, patient_instruction):
     }
 
 
-def generate_patient_guide_bedrock(session, answers, patient_instruction):
-    """의사 답변을 쉬운 한국어 bullet 안내문으로 바꾸는 Bedrock 호출입니다."""
+def generate_patient_guide_bedrock(
+    session: dict[str, Any],
+    onepager: dict[str, Any],
+    answers: list[dict[str, Any]],
+    patient_instruction: str,
+) -> dict[str, Any]:
+    """의사 답변을 어르신이 이해하기 쉬운 한국어 안내문으로 변환합니다."""
     payload = {
         "patient": session.get("patient", {}),
-        "onepager": session.get("onepager", {}),
+        "onepager": onepager,
         "doctor_answers": answers,
         "doctor_patient_instruction_displayed_separately": patient_instruction,
     }
     prompt = f"""
 You are a Korean patient instruction writer for older adults after a clinic visit.
-Convert doctor's answers into easy Korean guide items.
+Convert the doctor's answers into easy Korean guide items.
 
-Rules:
-- Do not add medical facts not present in doctor_answers or notes.
-- Do not copy the doctor's answer verbatim. Rewrite it into polite, easy Korean for an older patient.
-- Preserve the doctor's meaning, permission, warnings, timing, and follow-up conditions.
-- Keep each bullet short and clear. Prefer 1-3 sentences per question.
+Core rules:
+- Use only information present in doctor_answers, onepager, or the separate doctor instruction.
+- Do not invent diagnosis, prescription, dosage, duration, test results, or follow-up dates.
+- Do not copy the doctor's answer verbatim. Rewrite it into polite, easy Korean.
+- Preserve permissions, warnings, timing, follow-up conditions, and uncertainty.
+- Keep each bullet short and concrete.
 - Avoid difficult medical terms unless the doctor used them.
-- Do not output generic placeholders like "진료실에서 안내받은 내용을 따라 주세요."
-- The field doctor_patient_instruction_displayed_separately is shown as a separate blue "선생님 강조사항" card. Do not duplicate it inside question answer items.
-- Return JSON only.
-- The backend validates this with a strict Pydantic schema. Missing required fields or extra fields will fail.
+- The field doctor_patient_instruction_displayed_separately is displayed as a separate blue card.
+  Do not duplicate it inside question answer items.
+- Return JSON only. The backend validates the output with a strict schema.
 
 Few-shot examples:
-Input doctor answer: "혈압약은 계속 복용해도 되고, 감기약은 처방받은 약만 복용하도록 설명."
-Output answer_simple: ["혈압약은 평소처럼 계속 드세요.", "감기약은 오늘 처방받은 약만 드시는 것이 안전합니다."]
 
-Input doctor answer: "영양제는 이번 처방약과 큰 상호작용은 없으나 새 약 추가 시 재확인."
-Output answer_simple: ["현재 영양제는 이번 약과 같이 드셔도 됩니다.", "나중에 다른 약이 추가되면 병원이나 약국에 다시 확인해 주세요."]
+Example 1
+Doctor answer: "혈압약은 계속 복용해도 되고, 감기약은 오늘 처방받은 약만 복용하도록 설명."
+JSON item:
+{{
+  "question": "혈압약과 감기약을 같이 먹어도 되는지 궁금함",
+  "answer_simple": [
+    "혈압약은 평소처럼 계속 드셔도 됩니다.",
+    "감기약은 오늘 처방받은 약만 드시는 것이 안전합니다."
+  ],
+  "tts_emphasis_words": ["혈압약", "오늘 처방받은 약"]
+}}
 
-Schema:
+Example 2
+Doctor answer: "영양제는 이번 처방약과 큰 상호작용은 없어 보이나, 추가 약이 생기면 재확인."
+JSON item:
+{{
+  "question": "영양제를 처방약과 같이 먹어도 되는지 궁금함",
+  "answer_simple": [
+    "현재 드시는 영양제는 이번 약과 같이 드셔도 됩니다.",
+    "나중에 다른 약이 추가되면 병원이나 약국에 다시 확인해 주세요."
+  ],
+  "tts_emphasis_words": ["다른 약", "다시 확인"]
+}}
+
+Required JSON schema:
 {{
   "items": [
     {{
@@ -125,7 +166,7 @@ Schema:
 Data:
 {json.dumps(payload, ensure_ascii=False, default=json_default)}
 """.strip()
-    obj, raw_text = call_bedrock_json(prompt, GUIDE_MODEL_ID, GUIDE_MAX_TOKENS)
+    obj, raw_text, chain_meta = call_bedrock_json_with_meta(prompt, GUIDE_MODEL_ID, GUIDE_MAX_TOKENS)
     validated_obj, schema_errors = validate_guide_payload(obj)
     if schema_errors:
         raise ValueError(f"guide_pydantic_schema_failed: {schema_errors}")
@@ -147,12 +188,13 @@ Data:
         "llm_meta": {
             "model_id": GUIDE_MODEL_ID,
             "raw_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+            "langchain": chain_meta,
         },
     }
 
 
-def is_patient_guide_usable(guide, answers):
-    """빈 안내문, 너무 일반적인 문장, 의사 답변 원문 복사를 거부합니다."""
+def is_patient_guide_usable(guide: dict[str, Any], answers: list[dict[str, Any]]) -> bool:
+    """빈 안내문, 일반론, 의사 답변 원문 복사를 거부합니다."""
     items = guide.get("items") if isinstance(guide, dict) else []
     if not isinstance(items, list) or not items:
         return False
@@ -180,23 +222,24 @@ def is_patient_guide_usable(guide, answers):
     return usable_count > 0
 
 
-def get_guide(session_id):
-    """안내문 화면에서 사용할 patient_guide와 doctor note를 함께 반환합니다."""
+def get_guide(session_id: str) -> dict[str, Any] | None:
+    """안내문 화면에서 사용할 환자 안내문과 의사 강조사항을 반환합니다."""
     session = get_session(session_id)
     if not session:
         return None
-    guide = session.get("patient_guide") or {
+    guide = get_json(session, GUIDE_FILE, default=None) or {
         "generated_at": now_iso(),
         "items": [],
         "delivery_options": ["screen", "tts", "print"],
         "generation_method": "not_generated",
     }
+    doctor_review = get_json(session, DOCTOR_REVIEW_FILE, default={}) or {}
     return {
         "session_id": session_id,
         "patient_name_masked": (session.get("patient") or {}).get("name", "환자"),
         "patient_guide": guide,
         "doctor_additional_notes": (
-            (session.get("doctor_review") or {}).get("patient_instruction")
-            or (session.get("doctor_review") or {}).get("additional_notes", "")
+            doctor_review.get("patient_instruction")
+            or doctor_review.get("additional_notes", "")
         ),
     }

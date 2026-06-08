@@ -11,7 +11,8 @@
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | 개발자 | 저장소 구조, 프론트/백엔드 파일별 역할, 수정 위치 |
 | [LANGGRAPH_PIPELINE.md](LANGGRAPH_PIPELINE.md) | 개발자, 평가자 | 환자 답변 1개가 LangGraph 노드에서 처리되는 과정 |
 | [DATA_SCHEMA.md](DATA_SCHEMA.md) | 백엔드 개발자, 데이터 검토자 | DynamoDB item, LLM extraction, matched_slots, onepaper, guide JSON 구조 |
-| [MVP_SETUP.md](MVP_SETUP.md) | 개발자, 시연 준비자 | 로컬 실행, AWS 백엔드 연결, test 환경 점검 |
+| [SECURITY_DATA_INVENTORY.md](SECURITY_DATA_INVENTORY.md) | 개발자, 보안 검토자 | DynamoDB/S3 하이브리드 저장 구조와 필드별 보안 처리 기준 |
+| [MVP_SETUP.md](MVP_SETUP.md) | 개발자, 시연 준비자 | 로컬 실행, AWS 백엔드 연결, 배포 환경 점검 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | 배포 담당자 | Amplify, SAM, DynamoDB, IAM, Bedrock, Transcribe 배포 절차 |
 | [technical-guide.html](technical-guide.html) | 발표자, 평가자 | 브라우저에서 볼 수 있는 시각적 기술 설명 페이지 |
 | [architecture.drawio](architecture.drawio) | 발표자, 설계 검토자 | draw.io 아키텍처 다이어그램 |
@@ -27,13 +28,26 @@
 2. [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
 3. [LANGGRAPH_PIPELINE.md](LANGGRAPH_PIPELINE.md)
 4. [DATA_SCHEMA.md](DATA_SCHEMA.md)
-5. [MVP_SETUP.md](MVP_SETUP.md)
-6. [DEPLOYMENT.md](DEPLOYMENT.md)
-7. [technical-guide.html](technical-guide.html)
+5. [SECURITY_DATA_INVENTORY.md](SECURITY_DATA_INVENTORY.md)
+6. [MVP_SETUP.md](MVP_SETUP.md)
+7. [DEPLOYMENT.md](DEPLOYMENT.md)
+8. [technical-guide.html](technical-guide.html)
 
 ---
 
 ## 문서별 핵심 내용
+
+### 메인 README
+
+프로젝트를 처음 여는 사람이 전체 목적과 현재 구현 상태를 빠르게 파악하는 입구 문서입니다.
+
+포함 내용:
+
+- 서비스가 해결하려는 진료 전 문진 흐름
+- 프론트엔드, 백엔드, AWS 서비스 구성
+- LangChain/LangGraph, Pydantic validation, Hybrid IR의 역할
+- DynamoDB/S3 하이브리드 저장 원칙
+- 로컬 실행과 AWS 배포로 넘어가기 위한 기본 명령
 
 ### PROJECT_STRUCTURE.md
 
@@ -54,10 +68,11 @@
 포함 내용:
 
 - `input_transcript`부터 `response_payload`까지 노드 흐름
+- LangGraph `StateGraph` 안에서 LangChain Runnable node가 실행되는 방식
 - LLM extraction, schema validation, Hybrid IR, onepaper refresh 연결
 - safety flag 분기
 - LangChain과 LangGraph 역할 차이
-- DynamoDB trace 확인 위치
+- S3 trace와 DynamoDB artifact pointer 확인 위치
 
 ### DATA_SCHEMA.md
 
@@ -66,13 +81,25 @@
 포함 내용:
 
 - DynamoDB session item
-- `responses.Qx`
+- S3 `answers.redacted.json`
 - LLM extraction schema
 - Hybrid IR `matched_slots`
-- `ir_trace`
+- 최소 설명 trace `llm_trace.redacted.json`
 - `onepager`
-- `patient_guide`
+- S3 `patient_guide.redacted.json`
 - Pydantic validation error 구조
+
+### SECURITY_DATA_INVENTORY.md
+
+DynamoDB/S3 하이브리드 보안 구조의 기준 문서입니다.
+
+포함 내용:
+
+- 필드별 기존 위치와 반영 후 저장 위치
+- DynamoDB에 남기는 최소 세션 메타데이터
+- S3 artifact로 이동하는 문진 산출물
+- 저장하지 않는 직접식별정보
+- Macie, Lifecycle, KMS 적용 위치
 
 ### MVP_SETUP.md
 
@@ -81,7 +108,7 @@
 포함 내용:
 
 - 프론트 로컬 실행
-- 목업 모드와 AWS 연결 모드
+- 로컬 프론트 실행과 AWS 백엔드 연결 모드
 - SAM backend build
 - test 환경 스모크 테스트
 - 자주 발생하는 오류와 원인
@@ -116,11 +143,14 @@ AWS 배포 담당자를 위한 절차 문서입니다.
 - 의료 판단처럼 해석될 수 있는 표현을 피합니다.
 - LLM extraction, Hybrid IR, final review, guide generation의 책임을 분리해서 설명합니다.
 - 환자 음성은 S3에 저장하지 않는다는 원칙을 명시합니다.
+- 문진 원문, 원페이퍼, 안내문은 DynamoDB가 아니라 가명처리 S3 artifact로 저장한다는 원칙을 명시합니다.
 - LLM extraction fallback이 제거되어 실패가 조용히 대체되지 않음을 명시합니다.
 - 실제 계정 ID, 실제 API endpoint, 실제 bucket 이름, access key는 문서에 고정하지 않습니다.
+- LangChain은 "LLM 호출 chain", LangGraph는 "문진 처리 흐름 graph"로 구분해서 설명합니다.
+- DynamoDB에는 최소 상태와 S3 pointer만 저장하고, 문진 산출물은 S3 artifact에 저장한다는 현재 구현 상태를 기준으로 설명합니다.
 
 ---
 
-## 기준 브랜치
+## 기준 구현
 
-이 문서들은 `test` 브랜치의 MVP 구조를 기준으로 작성되었습니다. `main` 브랜치 또는 팀 저장소에 반영할 때는 Amplify 배포 대상 브랜치, API Gateway endpoint, DynamoDB table name, SAM stack name을 다시 확인해야 합니다.
+이 문서들은 현재 저장소의 서버리스 MVP 구조를 기준으로 작성되었습니다. 다른 AWS 계정, 다른 Amplify 앱, 별도 스테이징 환경으로 배포할 때는 배포 대상 브랜치, API Gateway endpoint, DynamoDB table name, SAM stack name, artifact bucket 이름을 환경에 맞게 다시 확인해야 합니다.

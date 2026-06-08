@@ -11,28 +11,44 @@ LLM은 그 틀 안의 값만 채워야 합니다.
 
 LLM이 매번 새로운 형식을 마음대로 만드는 구조가 아닙니다. 백엔드는 Pydantic schema로 필드, 타입, enum, extra field, source_quote를 검증합니다.
 
+또한 현재 구조에서는 DynamoDB와 S3의 역할을 분리합니다.
+
+```text
+DynamoDB = 대기열, 상태, 최소 환자 표시 정보, S3 artifact pointer
+S3 = 가명처리된 운영 artifact + 최소 설명 trace
+```
+
 ---
 
 ## 전체 데이터 흐름
 
 ```text
 POST /sessions
-  -> DynamoDB session item 생성
+  -> DynamoDB minimal session item 생성
 
 POST /process-answer
-  -> responses.Qx.text 저장
+  -> STT 확정 텍스트 수신
+  -> 원천 JSON 기반 RAG 참고 컨텍스트 검색
   -> LLM extraction JSON 생성
   -> Pydantic schema 검증
-  -> Hybrid IR matched_slots 생성
-  -> onepager 갱신
-  -> pipeline_trace 저장
+  -> source_quote 원문 포함 여부 검증
+  -> 검증 실패 시 LangGraph retry loop
+  -> 증상 문항이면 Hybrid IR matched_slots 생성
+  -> S3 answers.redacted.json 저장
+  -> S3 onepaper.redacted.json 저장
+  -> DynamoDB question_status, risk, status, artifact key 갱신
 
 POST /doctor-response
-  -> 의사 답변 저장
-  -> patient_guide 생성
+  -> S3 doctor_review.redacted.json 저장
+  -> 환자 안내문 생성
+  -> S3 patient_guide.redacted.json 저장
+  -> DynamoDB reviewed 상태와 guide key 갱신
+
+GET /onepager/{session_id}
+  -> S3 onepaper.redacted.json 조회
 
 GET /guide/{session_id}
-  -> 환자 안내문 조회
+  -> S3 patient_guide.redacted.json 조회
 ```
 
 ---
@@ -52,146 +68,144 @@ session_id (String)
 ```json
 {
   "session_id": "s_1780379760_45542aeb",
-  "created_at": "2026-06-02T14:56:00+09:00",
-  "updated_at": "2026-06-02T14:58:10+09:00",
-  "status": "doctor_ready",
+  "created_at": "2026-06-08T01:20:00+00:00",
+  "updated_at": "2026-06-08T01:25:10+00:00",
+  "expires_at": 1781000000,
+  "status": "completed",
   "queue_number": 3,
   "visit_type": "initial",
+  "risk": "none",
   "patient": {
-    "full_name": "김영자",
     "name": "김*자",
-    "birth_date": "1950-09-17",
     "age": 75,
+    "age_band": "70대",
     "gender": "여성",
     "department": "이비인후과",
     "doctor": "이민우",
-    "phone": "010-0000-0000",
-    "receipt_id": "A-0427"
+    "receipt_id": "A-0427",
+    "honorific": "어르신"
   },
-  "responses": {},
-  "question_results": {},
-  "matched_symptoms": [],
-  "onepager": {},
-  "doctor_review": {},
-  "patient_guide": {}
-}
-```
-
-### 주요 필드
-
-| 필드 | 설명 |
-| --- | --- |
-| `session_id` | 모든 화면과 API를 연결하는 공통 키 |
-| `status` | 접수, 문진 중, 완료, 우선 확인, 의사 확인 등 상태 |
-| `queue_number` | 오늘 접수 기준 대기 번호 |
-| `visit_type` | `initial` 또는 `followup` |
-| `patient` | 환자 기본 정보 |
-| `responses` | 문항별 환자 원문과 처리 결과 |
-| `question_results` | 문항별 결과 사본 또는 호환 저장 영역 |
-| `matched_symptoms` | 전체 세션 기준 표준 증상 매칭 결과 |
-| `onepager` | 의사 원페이퍼 JSON |
-| `doctor_review` | 의사 답변과 강조사항 |
-| `patient_guide` | 환자 안내문 JSON |
-
----
-
-## 2. Response Record
-
-문항별 원문과 처리 결과입니다.
-
-위치:
-
-```text
-session.responses.Q1
-session.responses.Q2
-session.responses.Q3
-session.responses.Q4
-```
-
-예시:
-
-```json
-{
-  "text": "어제부터 목이 칼칼하고 코가 막혀요.",
-  "confirmed": true,
-  "input_method": "transcribe_streaming",
-  "created_at": "2026-06-02T14:57:00+09:00",
-  "spans": [],
-  "structured": {},
-  "matched_slots": [],
-  "unmatched_spans": [],
-  "llm_meta": {},
-  "orchestration": {},
-  "pipeline_trace": []
-}
-```
-
-원칙:
-
-- `text`에는 환자 발화 원문을 보존합니다.
-- LLM이 표준화한 문장은 `structured.standardized_text`에 들어갑니다.
-- 증상 매칭 결과는 `matched_slots`에 들어갑니다.
-- 처리 과정은 `pipeline_trace`에 남습니다.
-
----
-
-## 3. LLM Extraction Output
-
-Bedrock Nova가 생성해야 하는 fixed JSON입니다.
-
-Pydantic schema:
-
-```text
-backend/serverless/src/schemas/extraction.py
-```
-
-Runtime adapter:
-
-```text
-backend/serverless/src/extraction_schema.py
-```
-
-예시:
-
-```json
-{
-  "spans": [
-    {
-      "source_quote": "목이 칼칼하고",
-      "type": "symptom",
-      "slot_ref": "throat_irritation",
-      "name": "목 자극감",
-      "normalized_text": "목 자극감",
-      "status": "있음",
-      "alert": false,
-      "explain": "환자가 목의 칼칼함을 직접 호소했습니다."
-    },
-    {
-      "source_quote": "코가 막혀요",
-      "type": "symptom",
-      "slot_ref": "nasal_obstruction",
-      "name": "코막힘",
-      "normalized_text": "코막힘",
-      "status": "있음",
-      "alert": false,
-      "explain": "환자가 코막힘을 직접 호소했습니다."
+  "artifact": {
+    "bucket": "<artifact-bucket-name>",
+    "prefix": "sessions/2026-06-08/s_1780379760_45542aeb/",
+    "answers_key": "sessions/2026-06-08/s_1780379760_45542aeb/answers.redacted.json",
+    "onepaper_key": "sessions/2026-06-08/s_1780379760_45542aeb/onepaper.redacted.json",
+    "guide_key": "sessions/2026-06-08/s_1780379760_45542aeb/patient_guide.redacted.json",
+    "consent_key": "sessions/2026-06-08/s_1780379760_45542aeb/consent.json",
+    "trace_key": "sessions/2026-06-08/s_1780379760_45542aeb/llm_trace.redacted.json"
+  },
+  "question_status": {
+    "Q1": {
+      "answered": true,
+      "span_count": 2,
+      "matched_count": 2,
+      "method": "bedrock_nova_pro",
+      "has_safety_flag": false
     }
-  ],
-  "structured": {
-    "standardized_text": "어제부터 목이 칼칼하고 코가 막힙니다.",
-    "clinical_clues": [
+  },
+  "onepager_ready": true,
+  "guide_ready": false,
+  "privacy_consent": {
+    "accepted": true,
+    "version": "munjin-privacy-consent-v1",
+    "method": "patient_tablet_modal",
+    "accepted_at": "2026-06-08T01:21:00+00:00",
+    "recorded_at": "2026-06-08T01:21:00+00:00"
+  }
+}
+```
+
+### DynamoDB에 저장하지 않는 필드
+
+다음 값은 DynamoDB session item에 저장하지 않습니다.
+
+| 저장하지 않는 값 | 처리 방식 |
+| --- | --- |
+| 환자 실명 | 마스킹 이름으로만 변환 후 폐기 |
+| 생년월일 | 나이/연령대 계산 후 폐기 |
+| 연락처 | MVP 저장 대상에서 제외 |
+| 문항별 원문 발화 | S3 `answers.redacted.json`에 저장 |
+| LLM spans/structured/matched_slots | S3 `answers.redacted.json`에 저장 |
+| 원페이퍼 전체 JSON | S3 `onepaper.redacted.json`에 저장 |
+| 의사 답변 전문 | S3 `doctor_review.redacted.json`에 저장 |
+| 환자 안내문 | S3 `patient_guide.redacted.json`에 저장 |
+| LangGraph trace 전문 | 저장하지 않음. 최소 node event와 확정 근거 요약만 S3 `llm_trace.redacted.json`에 저장 |
+
+---
+
+## 2. S3 Artifact Layout
+
+세션별 산출물은 다음 prefix 아래에 저장됩니다.
+
+```text
+sessions/YYYY-MM-DD/{session_id}/
+  consent.json
+  answers.redacted.json
+  onepaper.redacted.json
+  doctor_review.redacted.json
+  patient_guide.redacted.json
+  llm_trace.redacted.json
+```
+
+S3 artifact는 `artifact_store.py`에서만 직접 읽고 씁니다. 프론트엔드는 S3 URL을 직접 받지 않습니다.
+
+S3 객체 공통 wrapper:
+
+```json
+{
+  "stored_at": "2026-06-08T01:25:10+00:00",
+  "schema_version": "munjin-artifact-v1",
+  "payload": {}
+}
+```
+
+`payload` 안에는 저장 전 `privacy.redact_payload()`가 적용됩니다. 연락처, 주민번호, 이메일, 생년월일 형태의 직접식별정보는 저장 전 1차 마스킹됩니다.
+
+---
+
+## 3. answers.redacted.json
+
+문항별 환자 답변과 운영 화면 조립에 필요한 LLM/IR 결과입니다. 내부 메타데이터,
+prompt/response 전문, 후보 목록, 숫자 점수는 이 파일에 저장하지 않습니다.
+
+예시:
+
+```json
+{
+  "Q1": {
+    "text": "어제부터 목이 칼칼하고 코가 막혀요.",
+    "confirmed": true,
+    "spans": [
       {
-        "category": "증상맥락",
-        "label": "시작시점",
-        "summary": "어제부터 증상 시작",
-        "source_quote": "어제부터",
-        "source_question": "Q1",
-        "priority": "일반",
-        "related_symptoms": ["목 자극감", "코막힘"]
+        "source_quote": "목이 칼칼하고",
+        "type": "symptom",
+        "slot_ref": "throat_irritation",
+        "name": "목 자극감",
+        "normalized_text": "목 자극감",
+        "status": "있음",
+        "alert": false,
+        "explain": "환자가 목의 칼칼함을 직접 호소했습니다."
       }
     ],
-    "questions": [],
-    "unresolved_items": []
+    "structured": {
+      "standardized_text": "어제부터 목이 칼칼하고 코가 막힙니다.",
+      "clinical_clues": [],
+      "questions": [],
+      "unresolved_items": []
+    },
+    "matched_slots": [
+      {
+        "slot_id": "throat_irritation",
+        "name": "목의 통증",
+        "source_quote": "목이 칼칼하고",
+        "span_type": "symptom",
+        "alert": false,
+        "normalized_text": "목 자극감",
+        "status": "있음",
+        "explain": "환자 표현을 아산백과 기반 증상 인덱스와 비교했고, 어휘 근거와 Titan 의미 벡터 근거가 함께 충족되어 표준 증상으로 매칭했습니다.",
+        "ir_method": "bm25_titan_hybrid"
+      }
+    ]
   }
 }
 ```
@@ -211,181 +225,34 @@ backend/serverless/src/extraction_schema.py
 | `alert` | 안전상 우선 확인 여부 |
 | `explain` | 왜 이렇게 분리했는지 설명 |
 
-허용되는 `type`:
+LLM은 score/confidence를 만들 수 없습니다. IR 숫자 점수는 운영 artifact가 아니라
+최소 설명 trace 안의 확정 근거 요약으로만 제한 저장됩니다.
 
-```text
-symptom
-new
-progress_improved
-progress_worsened
-progress_unchanged
-medication
-medication_denial
-adherence_gap
-context
-```
+### 증상 상태 정책
 
-허용되는 `slot_ref`:
+`type`과 `status`는 함께 해석합니다. 단순히 증상 단어가 등장했다고 해서 모두
+현재 불편함 카드로 올라가지 않습니다.
 
-```text
-hemoptysis
-cough
-throat_irritation
-nasal_obstruction
-rhinorrhea
-fever
-sputum
-dyspnea
-chest_pain
-headache
-other
-```
+| 상황 | `type` | `status` | 원페이퍼 표시 |
+| --- | --- | --- | --- |
+| 현재 호소하는 증상 | `symptom`, `new` | `있음` | 오늘 말한 불편함 카드 |
+| 이전보다 악화된 증상 | `progress_worsened` | `있음` | 오늘 말한 불편함 카드 + 맥락 단서 |
+| 이전과 비슷하게 지속되는 증상 | `progress_unchanged` | `있음` | 오늘 말한 불편함 카드 |
+| 현재 명시적으로 없다고 한 증상 | `symptom_absent` | `없음` | clinical_clues 현재양상/부재 단서 |
+| 이전 증상이 호전되어 현재 불편함 카드로 올리지 않을 상태 | `progress_improved` | `없음` | clinical_clues 재진경과/호전 단서 |
 
-복약, 무복약, 순응도, 문맥 span은 `slot_ref: "other"`를 사용합니다.
-
-### `structured`
-
-LLM이 정리한 문항별 구조화 정보입니다.
-
-| 필드 | 설명 |
-| --- | --- |
-| `standardized_text` | 환자 발화를 표준 한국어 문장으로 정리 |
-| `clinical_clues` | 의사가 증상과 함께 보면 좋은 단서 |
-| `questions` | Q4에서 분리한 환자 질문 |
-| `unresolved_items` | 구조화하기 애매하지만 버리면 안 되는 표현 |
-
-### `clinical_clues`
-
-허용되는 category:
-
-```text
-증상맥락
-복약정보
-복약순응도
-재진경과
-```
-
-허용되는 label:
-
-```text
-시작시점
-기간
-현재양상
-악화요인
-완화요인
-복용중
-처방약 없음
-건강보조제
-누락
-악화
-호전
-새 증상
-```
-
-### `questions`
-
-Q4 환자 질문입니다.
-
-예시:
-
-```json
-{
-  "category": "supplement_drug_interaction",
-  "summary": "처방약과 영양제 병용 가능 여부 문의",
-  "original_quote": "처방받은 약이랑 영양제 같이 먹어도 되는지"
-}
-```
-
-허용 category:
-
-```text
-drug_drug_interaction
-supplement_drug_interaction
-food_drug_interaction
-treatment_duration
-followup_visit
-test_question
-lifestyle
-other
-```
-
-“따로 없어요”, “별로 없어요”, “궁금한 건 없어요” 같은 부정 답변은 question으로 저장하지 않습니다.
+`symptom_absent`와 `progress_improved`는 Hybrid IR 매칭 대상에서 제외됩니다.
+즉, “열은 안 나요”, “두통은 없어졌어요”는 중요한 문진 맥락으로 남지만
+“오늘 말한 불편함” 증상 카드로 표시되지 않습니다.
+여기서 `progress_improved`의 `status="없음"`은 “현재 불편함 카드 대상이 아님”을
+뜻하는 파이프라인 상태입니다. 원문이 완전 소실을 말하지 않았다면 시스템은
+“완전히 없어졌다”는 새 사실을 만들지 않고, 호전 맥락 단서로만 보존합니다.
 
 ---
 
-## 4. Validation Error
+## 4. onepaper.redacted.json
 
-Pydantic 검증 실패 시 retry prompt로 들어가는 오류입니다.
-
-예시:
-
-```json
-[
-  {
-    "field": "spans.0.source_quote",
-    "type": "value_error",
-    "message": "quote must be an exact substring of the patient answer"
-  },
-  {
-    "field": "spans.0.score",
-    "type": "extra_forbidden",
-    "message": "Extra inputs are not permitted"
-  }
-]
-```
-
-검증 실패 조건:
-
-- 필수 필드 누락
-- enum 값 오류
-- 예상하지 않은 필드 존재
-- `source_quote`가 원문에 없음
-- `original_quote`가 원문에 없음
-- LLM 임의 score/confidence/probability 출력
-- 증상 문항인데 span이 비어 있음
-
----
-
-## 5. Matched Symptom
-
-LLM span을 Hybrid IR로 표준 증상명에 매칭한 결과입니다.
-
-예시:
-
-```json
-{
-  "slot_id": "throat_irritation",
-  "name": "목의 통증",
-  "score": 0.9,
-  "source_quote": "목이 칼칼하고",
-  "normalized_text": "목 자극감",
-  "status": "있음",
-  "alert": false,
-  "ir_method": "bm25_titan_hybrid",
-  "ir_trace": {
-    "bm25_score": 0.28,
-    "vector_score": 0.67,
-    "label_score": 0.9,
-    "final_score": 0.9,
-    "accept_reason": "vector_plus_lexical_or_label",
-    "top_candidates": []
-  }
-}
-```
-
-중요:
-
-- `score`는 LLM이 만든 값이 아닙니다.
-- BM25, Titan vector similarity, label/alias 직접 일치 신호를 계산한 IR 점수입니다.
-- 표준 증상으로 확정되지 않은 span은 `unmatched_spans`에 남습니다.
-
----
-
-## 6. Onepaper JSON
-
-의사 화면이 읽는 최종 문진 요약 JSON입니다.
-
-예시:
+의사가 보는 원페이퍼 JSON입니다.
 
 ```json
 {
@@ -394,188 +261,158 @@ LLM span을 Hybrid IR로 표준 증상명에 매칭한 결과입니다.
     "age_text": "75세",
     "sex": "여성",
     "department": "이비인후과",
-    "visit_type": "initial",
-    "received_at": "15:04",
-    "audio_duration_text": "음성 0초"
+    "received_at": "10:30",
+    "audio_duration_text": "확인중",
+    "visit_type": "initial"
   },
-  "symptom_slots": [
-    {
-      "slot_id": "throat_irritation",
-      "name": "목의 통증",
-      "score": 0.9,
-      "source_quote": "목이 칼칼하고",
-      "source_question": "Q1",
-      "normalized_text": "목 자극감",
-      "status": "있음",
-      "explain": "환자가 목의 칼칼함을 직접 호소했습니다."
-    }
-  ],
-  "clinical_clues": [
-    {
-      "category": "증상맥락",
-      "label": "시작시점",
-      "summary": "어제부터 증상 시작",
-      "source_quote": "어제부터",
-      "source_question": "Q1",
-      "priority": "일반",
-      "related_symptoms": ["목 자극감"]
-    }
-  ],
-  "agenda": [
-    {
-      "category": "supplement_drug_interaction",
-      "type_label": "영양제 병용",
-      "summary": "처방약과 영양제 병용 가능 여부 문의",
-      "original_quote": "영양제 같이 먹어도 되는지",
-      "source_question": "Q4"
-    }
-  ],
+  "symptom_slots": [],
+  "clinical_clues": [],
+  "agenda": [],
   "doctor_brief": {
-    "headline": "목 불편감과 코막힘 호소, 복약 관련 질문 있음",
-    "priority": "일반",
+    "headline": "",
     "sections": []
   },
-  "review_items": [
-    {
-      "text": "발열 여부와 실제 체온 확인",
-      "priority": "일반",
-      "evidence": "목이 칼칼하고 코가 막힘"
-    }
-  ],
-  "transfer_text": "75세 여성 초진 환자. 어제부터 목 불편감과 코막힘 호소.",
+  "review_items": [],
+  "transfer_text": "",
   "safety_flags": [],
   "unresolved_items": []
 }
 ```
 
-### 원페이퍼 생성 주체
-
-| 영역 | 생성 방식 |
-| --- | --- |
-| `patient_summary` | 세션 기본 정보 기반 deterministic 조립 |
-| `symptom_slots` | LLM span + Hybrid IR 결과 |
-| `clinical_clues` | LLM extraction 결과 중 검증 통과한 clue |
-| `agenda` | Q4 LLM extraction questions |
-| `doctor_brief` | 원페이퍼 review LLM |
-| `review_items` | Nova Pro review LLM |
-| `transfer_text` | 원페이퍼 JSON 기반 Nova Pro review LLM |
-| `safety_flags` | quick safety flag와 저장 결과 |
+`review_items`, `doctor_brief`, `transfer_text`는 Nova Pro review가 생성할 수 있지만, schema 검증과 근거 검증을 통과한 경우에만 반영됩니다.
 
 ---
 
-## 7. Doctor Response
+## 5. doctor_review.redacted.json
 
-의사가 원페이퍼에서 환자 질문에 답변하거나 안내 강조사항을 입력한 결과입니다.
-
-예시:
+의사가 환자 질문에 답변하거나 강조사항을 적으면 S3에 저장됩니다.
 
 ```json
 {
-  "session_id": "s_...",
   "answers": [
     {
-      "category": "supplement_drug_interaction",
-      "question": "처방약과 영양제 병용 가능 여부 문의",
-      "answer": "진료실에서 안내받은 약과 영양제는 함께 복용 가능합니다."
+      "question_id": "Q4-1",
+      "question_summary": "처방약과 영양제를 같이 먹어도 되는지 궁금함",
+      "answer_text": "현재 영양제는 같이 드셔도 됩니다. 새 약이 추가되면 다시 확인해 주세요."
     }
   ],
-  "patient_instruction": "약이랑 영양제 같이 꼭 아침 저녁으로 드세요.",
-  "updated_at": "2026-06-02T15:10:00+09:00"
+  "patient_instruction": "증상이 심해지면 즉시 병원에 다시 와주세요.",
+  "additional_notes": "증상이 심해지면 즉시 병원에 다시 와주세요.",
+  "reviewed_at": "2026-06-08T01:30:00+00:00"
 }
 ```
 
-의사 강조사항은 환자 안내문에서 원문 그대로 보여주는 것이 기본입니다.
+의사 강조사항은 LLM이 변형하지 않고 환자 안내문에서 별도 카드로 표시합니다.
 
 ---
 
-## 8. Patient Guide JSON
+## 6. patient_guide.redacted.json
 
-환자 안내문 화면이 읽는 JSON입니다.
-
-예시:
+환자 안내문 JSON입니다.
 
 ```json
 {
-  "patient_name": "김*자",
-  "date": "2026. 6. 2.",
+  "generated_at": "2026-06-08T01:31:00+00:00",
   "items": [
     {
-      "question": "처방약과 영양제 병용 가능 여부 문의",
-      "answer": "문제 없이 복용 가능합니다.",
-      "tts_text": "문제 없이 복용 가능합니다."
+      "question": "처방약과 영양제를 같이 먹어도 되는지 궁금함",
+      "answer_simple": [
+        "현재 드시는 영양제는 이번 약과 같이 드셔도 됩니다.",
+        "나중에 다른 약이 추가되면 병원이나 약국에 다시 확인해 주세요."
+      ],
+      "tts_emphasis_words": ["다른 약", "다시 확인"]
     }
   ],
-  "doctor_instruction": "약이랑 영양제 같이 꼭 아침 저녁으로 드세요."
+  "delivery_options": ["screen", "tts", "print"],
+  "generation_method": "bedrock_nova_lite_grounded"
 }
 ```
 
-환자 안내문 LLM은 의학적 내용을 새로 판단하는 것이 아니라, 의사가 입력한 답변을 환자가 읽기 쉬운 문장으로 정리합니다.
-
 ---
 
-## 9. Orchestration Trace
+## 7. llm_trace.redacted.json
 
-LangGraph 처리 경로입니다.
-
-예시:
+LLM black-box 해소와 의료·법적 이슈 대응을 위한 최소 설명 trace입니다.
+운영 화면을 만들기 위한 파일이 아니며, prompt 전문, LLM raw response, 전체 graph
+정의, IR top candidate 목록은 저장하지 않습니다.
 
 ```json
 {
-  "graph": "munjin_langgraph_answer_pipeline",
-  "version": "v1",
-  "nodes": [
-    "input_transcript",
-    "quick_safety_flag",
-    "semantic_extraction",
-    "schema_quote_validation",
-    "hybrid_ir_match",
-    "session_validation_save",
-    "safety_guardrail_save",
-    "onepaper_refresh",
-    "response_payload"
-  ],
-  "active_path": [
-    "input_transcript",
-    "quick_safety_flag",
-    "semantic_extraction",
-    "schema_quote_validation",
-    "hybrid_ir_match",
-    "session_validation_save",
-    "onepaper_refresh",
-    "response_payload"
-  ],
-  "trace": [
-    {
-      "node": "semantic_extraction",
-      "status": "passed",
-      "details": {
-        "model_id": "apac.amazon.nova-pro-v1:0",
-        "attempts": 1,
-        "span_count": 2
+  "Q1": {
+    "graph": "munjin_langgraph_answer_pipeline",
+    "version": "v2",
+    "question_type": "chief_complaint",
+    "active_path": [
+      "input_transcript",
+      "quick_safety_flag",
+      "rag_context_retrieval",
+      "semantic_extraction",
+      "schema_quote_validation",
+      "hybrid_ir_match",
+      "session_validation_save",
+      "onepaper_refresh",
+      "response_payload"
+    ],
+    "events": [
+      {
+        "node": "semantic_extraction",
+        "status": "generated",
+        "at": "2026-06-08T01:25:00+00:00",
+        "details": {
+          "attempt": 1,
+          "model_id": "apac.amazon.nova-pro-v1:0",
+          "langchain_chain": "langchain_core_prompt_bedrock_json",
+          "output_parser": "langchain_json_output_parser",
+          "raw_sha256": "..."
+        }
+      },
+      {
+        "node": "hybrid_ir_match",
+        "status": "matched",
+        "details": {
+          "method": "bm25_titan_hybrid",
+          "matched_count": 1,
+          "accepted_matches": [
+            {
+              "slot_id": "throat_irritation",
+              "name": "목의 통증",
+              "source_quote": "목이 칼칼하고",
+              "ir_method": "bm25_titan_hybrid",
+              "accept_reason": "vector_plus_lexical_or_label",
+              "bm25_score": 1,
+              "vector_score": 0.46,
+              "label_score": 1,
+              "rank_score": 1.07
+            }
+          ]
+        }
       }
-    }
-  ]
+    ],
+    "matched_count": 1,
+    "span_count": 1
+  }
 }
 ```
 
----
-
-## 데이터 원칙 요약
-
-- 환자 원문은 반드시 보존합니다.
-- LLM은 미리 정의된 JSON 틀 안의 값만 채웁니다.
-- LLM 출력은 schema validator를 통과해야 합니다.
-- quote는 원문 substring이어야 합니다.
-- LLM 임의 score는 금지합니다.
-- 증상 score는 IR 계산 점수입니다.
-- LLM extraction 실패는 rule-based 결과로 대체하지 않습니다.
-- 환자 음성 파일은 S3에 저장하지 않습니다.
-- 의사 강조사항은 환자 안내문에서 원문 그대로 표시합니다.
+이 파일의 숫자는 환자에게 보여주는 confidence가 아닙니다. IR 내부 계산이 왜 특정
+표준 증상을 채택했는지 사후 검토하기 위한 근거 요약입니다.
 
 ---
 
-## 관련 문서
+## 8. Pydantic Validation Error
 
-- [LangGraph 파이프라인](LANGGRAPH_PIPELINE.md)
-- [프로젝트 구조](PROJECT_STRUCTURE.md)
-- [서버리스 백엔드 README](../backend/serverless/README.md)
+LLM이 schema나 quote 검증을 끝까지 통과하지 못하면 저장하지 않고 422를 반환합니다.
+
+```json
+{
+  "error": "semantic_extraction_failed",
+  "message": "LLM schema/quote validation failed after retries.",
+  "details": {
+    "attempts": 3,
+    "retry_loop": "langgraph_schema_quote_repair",
+    "validation_error_count": 1
+  }
+}
+```
+
+안전 플래그가 있는 경우에는 LLM extraction 실패 중에도 `safety_guardrail_save` 경로로 위험 요약만 저장할 수 있습니다.

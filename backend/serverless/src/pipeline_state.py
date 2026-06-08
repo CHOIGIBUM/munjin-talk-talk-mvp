@@ -26,6 +26,14 @@ class AnswerPipelineState(TypedDict, total=False):
     visit_type: str
     transcript: str
     preliminary_safety_flag: dict[str, Any] | None
+    rag_context: dict[str, Any]
+    extraction_attempt: int
+    extraction_raw: dict[str, Any]
+    extraction_raw_text: str
+    extraction_chain_meta: dict[str, Any]
+    extraction_validation_errors: list[dict[str, Any]]
+    repair_note: str
+    retry_extraction: bool
     extracted: dict[str, Any]
     matched: dict[str, Any]
     validated: dict[str, Any]
@@ -42,10 +50,11 @@ class AnswerPipelineState(TypedDict, total=False):
 # 같은 순서를 유지합니다.
 PIPELINE_GRAPH = {
     "name": "munjin_langgraph_answer_pipeline",
-    "version": "v1",
+    "version": "v2",
     "nodes": [
         "input_transcript",
         "quick_safety_flag",
+        "rag_context_retrieval",
         "semantic_extraction",
         "schema_quote_validation",
         "hybrid_ir_match",
@@ -57,8 +66,10 @@ PIPELINE_GRAPH = {
     "edges": [
         ["__start__", "input_transcript"],
         ["input_transcript", "quick_safety_flag"],
-        ["quick_safety_flag", "semantic_extraction"],
+        ["quick_safety_flag", "rag_context_retrieval"],
+        ["rag_context_retrieval", "semantic_extraction"],
         ["semantic_extraction", "schema_quote_validation"],
+        ["schema_quote_validation", "semantic_extraction"],
         ["schema_quote_validation", "hybrid_ir_match"],
         ["schema_quote_validation", "safety_guardrail_save"],
         ["hybrid_ir_match", "session_validation_save"],

@@ -1,13 +1,18 @@
 """Pydantic-backed validation for LLM extraction output.
 
-이 파일은 extraction.py가 호출하는 얇은 adapter입니다. 실제 fixed schema는
-`schemas/extraction.py`에 있고, 여기서는 question_id 같은 런타임 기본값만 보강한
-뒤 Pydantic 검증 결과를 기존 파이프라인 형식으로 돌려줍니다.
+LangGraph의 `schema_quote_validation_node`가 쓰는 얇은 adapter입니다.
+실제 fixed schema는 `schemas/extraction.py`에 있고, 여기서는 question_id 같은 런타임 기본값만 보강한 뒤 Pydantic 검증 결과를
+파이프라인 형식으로 돌려줍니다.
 """
 
 import re
 from copy import deepcopy
 
+from clinical_state import (
+    ABSENT_STATUS,
+    ACTIVE_SYMPTOM_SPAN_TYPES,
+    NON_ACTIVE_SYMPTOM_SPAN_TYPES,
+)
 from schemas.extraction import SymptomSlotRef, validate_extraction_payload
 
 
@@ -31,14 +36,16 @@ NEGATIVE_PATIENT_QUESTION_PATTERNS = [
 def normalize_extraction_output(obj, transcript, question_id, question_type=""):
     """LLM 출력이 fixed schema와 quote grounding을 통과하는지 검증합니다.
 
-    반환 형식은 기존 retry loop와 맞추기 위해 `(normalized, errors)`입니다.
-    errors가 비어 있지 않으면 extraction.py가 repair prompt를 만들어 LLM에 다시
-    요청합니다.
+    반환 형식은 retry loop와 맞추기 위해 `(normalized, errors)`입니다.
+    errors가 비어 있지 않으면 호출자가 repair prompt를 만들어 LLM에 다시 요청합니다.
+    운영 경로에서는 이 retry가 LangGraph edge로 trace됩니다.
     """
     prepared = prepare_extraction_payload(obj, question_id, question_type)
     normalized, errors = validate_extraction_payload(prepared, transcript)
     if not errors:
         errors.extend(validate_question_level_requirements(normalized, transcript, question_type))
+    if not errors:
+        errors.extend(validate_span_state_consistency(normalized))
     if errors:
         return {"spans": [], "structured": empty_structured(transcript)}, errors
     return normalized, []
@@ -148,6 +155,38 @@ def validate_question_level_requirements(normalized, transcript, question_type="
             "msg": "Symptom question answers must include at least one grounded span unless the patient clearly denies symptoms.",
         }
     ]
+
+
+def validate_span_state_consistency(normalized):
+    """증상 span의 type/status 조합이 임상적으로 일관적인지 검사합니다.
+
+    이 함수는 새 증상을 추출하지 않습니다. LLM이 이미 만든 span이
+    "현재 있음", "현재 없음", "호전", "악화/지속" 중 어디에 속하는지
+    스키마 규칙과 맞는지만 확인합니다. 틀린 조합은 저장하지 않고 retry loop가
+    다시 생성하도록 오류를 반환합니다.
+    """
+    errors = []
+    for idx, span in enumerate(normalized.get("spans") or []):
+        span_type = str(span.get("type") or "")
+        status = str(span.get("status") or "")
+        if span_type in NON_ACTIVE_SYMPTOM_SPAN_TYPES and status != ABSENT_STATUS:
+            errors.append({
+                "loc": ["spans", idx, "status"],
+                "msg": (
+                    "Non-active symptom states such as progress_improved or symptom_absent "
+                    "must use status '없음'. If the symptom is still present, add a separate "
+                    "active symptom span with status '있음'."
+                ),
+            })
+        if span_type in ACTIVE_SYMPTOM_SPAN_TYPES and status == ABSENT_STATUS:
+            errors.append({
+                "loc": ["spans", idx, "type"],
+                "msg": (
+                    "Active symptom span types cannot use status '없음'. Use symptom_absent "
+                    "for explicit absence, or progress_improved for resolved/improved previous symptoms."
+                ),
+            })
+    return errors
 
 
 def is_negative_symptom_answer(transcript):

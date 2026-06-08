@@ -4,10 +4,14 @@
 작게 유지하고, 라우팅/그래프 조립은 `pipeline_graph.py`에 맡깁니다.
 """
 
+import hashlib
 from typing import Any
 
+from artifact_policy import sanitize_matched_slot, sanitize_span
 from clinical_terms import find_safety_flag
-from extraction import extract_question
+from extraction_prompts import build_extraction_prompt, build_extraction_repair_note, select_extraction_model
+from extraction_schema import empty_structured, normalize_extraction_output
+from llm import call_bedrock_json_with_meta
 from onepager import validate_and_save
 from pipeline_state import AnswerPipelineState, SYMPTOM_QUESTION_TYPES
 from pipeline_trace import (
@@ -17,7 +21,9 @@ from pipeline_trace import (
     response_errors,
     trace_update,
 )
+from rag_context import retrieve_intake_rag_context
 from retrieval import match_slots
+from settings import EXTRACTION_RETRY_ATTEMPTS, MAX_LLM_TOKENS
 from utils import normalize_visit_type, response
 
 
@@ -81,35 +87,98 @@ def quick_safety_flag_node(state: AnswerPipelineState) -> dict[str, Any]:
     return update
 
 
+def rag_context_retrieval_node(state: AnswerPipelineState) -> dict[str, Any]:
+    """LLM extraction 전에 원천 JSON 기반 RAG 참고 문맥을 검색합니다."""
+    rag_context = retrieve_intake_rag_context(
+        state.get("transcript") or "",
+        question_type=state.get("question_type"),
+    )
+    update = {"rag_context": rag_context}
+    update.update(
+        trace_update(
+            state,
+            "rag_context_retrieval",
+            "retrieved",
+            {
+                "retriever": rag_context.get("retriever"),
+                "alias_hint_count": len(rag_context.get("alias_hints") or []),
+                "symptom_reference_count": len(rag_context.get("symptom_references") or []),
+                "source_files": rag_context.get("source_files") or [],
+            },
+        )
+    )
+    return update
+
+
 def semantic_extraction_node(state: AnswerPipelineState) -> dict[str, Any]:
-    """Bedrock LLM으로 의미 단위 분할, 표준화, 고정 스키마 출력을 수행합니다."""
-    body = {
-        **(state.get("body") or {}),
-        "session_id": state.get("session_id"),
-        "question_id": state.get("question_id"),
-        "question_type": state.get("question_type"),
-        "visit_type": state.get("visit_type"),
-        "transcript": state.get("transcript"),
+    """LangChain Runnable chain으로 Bedrock extraction JSON을 생성합니다."""
+    question_id = state.get("question_id") or ""
+    question_type = state.get("question_type") or ""
+    visit_type = state.get("visit_type") or ""
+    transcript = state.get("transcript") or ""
+    attempt = int(state.get("extraction_attempt") or 0) + 1
+    model_id = select_extraction_model(visit_type, question_id, question_type)
+    rag_context = state.get("rag_context") or {}
+    try:
+        prompt = build_extraction_prompt(
+            visit_type,
+            question_id,
+            question_type,
+            transcript,
+            repair_note=state.get("repair_note") or "",
+            rag_context_note=rag_context.get("prompt_note") or "",
+        )
+        obj, raw_text, chain_meta = call_bedrock_json_with_meta(prompt, model_id, MAX_LLM_TOKENS)
+    except Exception as exc:
+        extracted = {
+            "spans": [],
+            "structured": empty_structured(transcript),
+            "transcript": transcript,
+            "method": "bedrock_error",
+            "validator_passed": False,
+            "error": str(exc),
+            "llm_meta": {
+                "model_id": model_id,
+                "attempts": attempt,
+                "retry_loop": "langgraph_schema_quote_repair",
+                "langchain": {"chain": "langchain_core_prompt_bedrock_json", "error": str(exc)},
+            },
+        }
+        update = {
+            "extraction_attempt": attempt,
+            "extraction_raw": {},
+            "extraction_raw_text": "",
+            "extraction_chain_meta": extracted["llm_meta"]["langchain"],
+            "retry_extraction": False,
+            "extracted": extracted,
+            "semantic_failed": True,
+        }
+        update.update(trace_update(state, "semantic_extraction", "failed", extracted["llm_meta"]))
+        return update
+
+    update = {
+        "extraction_attempt": attempt,
+        "extraction_raw": obj,
+        "extraction_raw_text": raw_text,
+        "extraction_chain_meta": chain_meta,
+        "retry_extraction": False,
+        "semantic_failed": False,
     }
-    extracted = extract_question(body)
-    llm_meta = extracted.get("llm_meta") or {}
-    semantic_failed = extracted.get("validator_passed") is False or extracted.get("method") in {
-        "bedrock_error",
-        "bedrock_disabled",
-    }
-    update = {"extracted": extracted, "semantic_failed": semantic_failed}
     update.update(
         trace_update(
             state,
             "semantic_extraction",
-            "failed" if semantic_failed else "passed",
+            "generated",
             {
-                "method": extracted.get("method"),
-                "model_id": llm_meta.get("model_id"),
-                "attempts": llm_meta.get("attempts"),
-                "validation_error_count": len(llm_meta.get("validation_errors") or []),
-                "span_count": len(extracted.get("spans") or []),
-                "structured_keys": sorted((extracted.get("structured") or {}).keys()),
+                "attempt": attempt,
+                "model_id": model_id,
+                "langchain_chain": chain_meta.get("chain"),
+                "prompt_adapter": chain_meta.get("prompt_adapter"),
+                "bedrock_runnable": chain_meta.get("bedrock_runnable"),
+                "output_parser": chain_meta.get("output_parser"),
+                "rag_alias_hint_count": len(rag_context.get("alias_hints") or []),
+                "rag_symptom_reference_count": len(rag_context.get("symptom_references") or []),
+                "raw_sha256": chain_meta.get("raw_sha256"),
             },
         )
     )
@@ -117,9 +186,16 @@ def semantic_extraction_node(state: AnswerPipelineState) -> dict[str, Any]:
 
 
 def schema_quote_validation_node(state: AnswerPipelineState) -> dict[str, Any]:
-    """LLM 출력이 스키마와 원문 quote 검증을 통과했는지 분기합니다."""
-    extracted = state.get("extracted") or {}
-    if state.get("semantic_failed"):
+    """LLM 출력 JSON을 Pydantic schema와 source_quote 규칙으로 검증합니다."""
+    transcript = state.get("transcript") or ""
+    question_id = state.get("question_id") or ""
+    question_type = state.get("question_type") or ""
+    attempt = int(state.get("extraction_attempt") or 1)
+    max_attempts = max(1, EXTRACTION_RETRY_ATTEMPTS)
+    chain_meta = state.get("extraction_chain_meta") or {}
+
+    if state.get("semantic_failed") and not state.get("extraction_raw"):
+        extracted = state.get("extracted") or {}
         safety_flag = state.get("preliminary_safety_flag")
         if safety_flag:
             update = {"safety_only": True}
@@ -141,7 +217,10 @@ def schema_quote_validation_node(state: AnswerPipelineState) -> dict[str, Any]:
                 {
                     "error": "semantic_extraction_failed",
                     "message": extracted.get("error") or "LLM schema/quote validation failed after retries.",
-                    "llm_meta": extracted.get("llm_meta") or {},
+                    "details": {
+                        "attempts": attempt,
+                        "retry_loop": "langgraph_schema_quote_repair",
+                    },
                 },
             )
         }
@@ -158,19 +237,176 @@ def schema_quote_validation_node(state: AnswerPipelineState) -> dict[str, Any]:
         )
         return update
 
-    update = {"safety_only": False}
+    normalized, validation_errors = normalize_extraction_output(
+        state.get("extraction_raw") or {},
+        transcript,
+        question_id,
+        question_type,
+    )
+    if not validation_errors:
+        extracted = normalized or {"spans": [], "structured": empty_structured(transcript)}
+        raw_text = state.get("extraction_raw_text") or ""
+        extracted.update(
+            {
+                "transcript": transcript,
+                "method": "bedrock_nova",
+                "validator_passed": True,
+                "llm_meta": {
+                    "model_id": chain_meta.get("model_id"),
+                    "raw_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+                    "langchain": chain_meta,
+                    "rag_context": summarize_rag_context(state.get("rag_context") or {}),
+                    "validation_errors": [],
+                    "attempts": attempt,
+                    "retry_loop": "langgraph_schema_quote_repair",
+                },
+            }
+        )
+        update = {
+            "extracted": extracted,
+            "semantic_failed": False,
+            "safety_only": False,
+            "retry_extraction": False,
+            "extraction_validation_errors": [],
+            "repair_note": "",
+        }
+        update.update(
+            trace_update(
+                state,
+                "schema_quote_validation",
+                "passed",
+                {
+                    "validator": "pydantic_extraction_schema",
+                    "source_quote_grounding": "passed",
+                    "attempt": attempt,
+                    "span_count": len(extracted.get("spans") or []),
+                    "structured_keys": sorted((extracted.get("structured") or {}).keys()),
+                    "langchain_output_parser": chain_meta.get("output_parser"),
+                },
+            )
+        )
+        return update
+
+    if attempt < max_attempts:
+        repair_note = build_extraction_repair_note(validation_errors, transcript)
+        update = {
+            "retry_extraction": True,
+            "semantic_failed": False,
+            "extraction_validation_errors": validation_errors,
+            "repair_note": repair_note,
+        }
+        update.update(
+            trace_update(
+                state,
+                "schema_quote_validation",
+                "retry",
+                {
+                    "validator": "pydantic_extraction_schema",
+                    "source_quote_grounding": "failed",
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "validation_error_count": len(validation_errors),
+                    "validation_errors": validation_errors[:5],
+                    "next_node": "semantic_extraction",
+                },
+            )
+        )
+        return update
+
+    extracted = {
+        "spans": [],
+        "structured": empty_structured(transcript),
+        "transcript": transcript,
+        "method": "bedrock_nova",
+        "validator_passed": False,
+        "error": "LLM schema/quote validation failed after retries.",
+        "llm_meta": {
+            "model_id": chain_meta.get("model_id"),
+            "raw_sha256": hashlib.sha256((state.get("extraction_raw_text") or "").encode("utf-8")).hexdigest(),
+            "langchain": chain_meta,
+            "rag_context": summarize_rag_context(state.get("rag_context") or {}),
+            "validation_errors": validation_errors,
+            "attempts": attempt,
+            "retry_loop": "langgraph_schema_quote_repair",
+        },
+    }
+    safety_flag = state.get("preliminary_safety_flag")
+    if safety_flag:
+        update = {
+            "extracted": extracted,
+            "semantic_failed": True,
+            "safety_only": True,
+            "retry_extraction": False,
+            "extraction_validation_errors": validation_errors,
+        }
+        update.update(
+            trace_update(
+                state,
+                "schema_quote_validation",
+                "safety_branch",
+                {
+                    "reason": "validator_failed_after_retries_but_safety_flag_exists",
+                    "validation_error_count": len(validation_errors),
+                    "attempt": attempt,
+                },
+            )
+        )
+        return update
+
+    update = {
+        "extracted": extracted,
+        "semantic_failed": True,
+        "retry_extraction": False,
+        "error_response": response(
+            422,
+            {
+                "error": "semantic_extraction_failed",
+                "message": extracted.get("error"),
+                "details": {
+                    "attempts": attempt,
+                    "retry_loop": "langgraph_schema_quote_repair",
+                    "validation_error_count": len(validation_errors),
+                },
+            },
+        ),
+    }
     update.update(
         trace_update(
             state,
             "schema_quote_validation",
-            "passed",
+            "failed",
             {
-                "validator_passed": bool(extracted.get("validator_passed")),
-                "retry_loop": (extracted.get("llm_meta") or {}).get("retry_loop"),
+                "reason": "validator_failed_without_safety_flag",
+                "validation_error_count": len(validation_errors),
+                "validation_errors": validation_errors[:5],
+                "attempt": attempt,
             },
         )
     )
     return update
+
+
+def summarize_rag_context(rag_context: dict[str, Any]) -> dict[str, Any]:
+    """LLM meta에 저장할 RAG 요약입니다. 긴 prompt 문단은 저장하지 않습니다."""
+    return {
+        "retriever": rag_context.get("retriever"),
+        "source_files": rag_context.get("source_files") or [],
+        "alias_hints": [
+            {
+                "matched_text": item.get("matched_text"),
+                "canonical_hint": item.get("canonical_hint"),
+            }
+            for item in (rag_context.get("alias_hints") or [])[:5]
+        ],
+        "symptom_references": [
+            {
+                "symptom_id": item.get("symptom_id"),
+                "display_name": item.get("display_name"),
+                "bm25_score": item.get("bm25_score"),
+            }
+            for item in (rag_context.get("symptom_references") or [])[:5]
+        ],
+    }
 
 
 def hybrid_ir_match_node(state: AnswerPipelineState) -> dict[str, Any]:
@@ -201,14 +437,34 @@ def hybrid_ir_match_node(state: AnswerPipelineState) -> dict[str, Any]:
                 "matched_count": len(matched.get("matched_slots") or []),
                 "unmatched_count": len(matched.get("unmatched_spans") or []),
                 "method": "bm25_titan_hybrid",
+                "accepted_matches": summarize_ir_matches(matched.get("matched_slots") or []),
             },
         )
     )
     return update
 
 
+def summarize_ir_matches(slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """감사용 trace에 남길 IR 확정 근거를 후보 목록 없이 요약합니다."""
+    summary = []
+    for slot in slots:
+        trace = slot.get("ir_trace") if isinstance(slot.get("ir_trace"), dict) else {}
+        summary.append({
+            "slot_id": slot.get("slot_id"),
+            "name": slot.get("name"),
+            "source_quote": slot.get("source_quote"),
+            "ir_method": slot.get("ir_method"),
+            "accept_reason": trace.get("accept_reason"),
+            "bm25_score": trace.get("bm25_score"),
+            "vector_score": trace.get("vector_score"),
+            "label_score": trace.get("label_score"),
+            "rank_score": trace.get("rank_score"),
+        })
+    return summary[:8]
+
+
 def session_validation_save_node(state: AnswerPipelineState) -> dict[str, Any]:
-    """검증된 문항 결과를 DynamoDB에 저장하고 onepaper를 갱신합니다."""
+    """검증된 문항 결과를 S3 artifact에 저장하고 DynamoDB 상태를 갱신합니다."""
     extracted = state.get("extracted") or {}
     matched = state.get("matched") or {"matched_slots": [], "unmatched_spans": []}
     save_trace = next_trace_entry(
@@ -348,15 +604,27 @@ def response_payload_node(state: AnswerPipelineState) -> dict[str, Any]:
     )
     persist_final_trace(state, final_trace)
     payload = {
-        "spans": extracted.get("spans", []),
+        "spans": [sanitize_span(span) for span in extracted.get("spans", []) if isinstance(span, dict)],
         "structured": extracted.get("structured", {}),
-        "matched_slots": matched.get("matched_slots", []),
-        "unmatched_spans": matched.get("unmatched_spans", []),
+        "matched_slots": [
+            sanitize_matched_slot(slot)
+            for slot in matched.get("matched_slots", [])
+            if isinstance(slot, dict)
+        ],
+        "unmatched_spans": [
+            sanitize_span(span)
+            for span in matched.get("unmatched_spans", [])
+            if isinstance(span, dict)
+        ],
         "validator_passed": bool(validated.get("validator_passed")),
         "safety_flag": validated.get("safety_flag") or state.get("preliminary_safety_flag"),
         "errors": response_errors(state),
         "onepager_ready": validated.get("onepager_ready", False),
-        "orchestration": orchestration_snapshot(state, final_trace),
+        "pipeline": {
+            "graph": "munjin_langgraph_answer_pipeline",
+            "status": "completed",
+            "active_path": [entry["node"] for entry in final_trace if entry.get("node")],
+        },
     }
     update = {"result_payload": payload}
     update["trace"] = final_trace

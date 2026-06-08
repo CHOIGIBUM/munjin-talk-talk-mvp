@@ -7,6 +7,7 @@ hint를 조합해 표준 증상명으로 매칭합니다.
 
 from decimal import Decimal
 
+from clinical_state import is_non_active_symptom_state
 from clinical_terms import (
     IR_RED_FLAG_NAMES,
     SYMPTOM_RULES,
@@ -65,7 +66,8 @@ def retrieve_symptom_docs(source_quote, normalized_text, span_name="", preferred
     }
     candidate_ids = bm25_top | vector_top | label_top
     if q_emb is not None and not doc_embeddings:
-        # Packaged vector index is absent: still use Titan for the BM25/label candidates.
+        # 배포 패키지에 사전 계산 vector index가 없으면 BM25/label 후보만 대상으로
+        # Titan embedding을 즉시 계산해 semantic 비교를 이어갑니다.
         for idx in list(candidate_ids):
             try:
                 emb = embed_text(docs[idx].get("embedding_text", ""))
@@ -141,13 +143,16 @@ def is_hybrid_candidate_accepted(candidate):
     )
 
 def match_slots(body):
-    """`POST /match` 진입점. LLM span을 원페이퍼에 표시할 matched_slots로 변환합니다."""
+    """LangGraph 내부 IR 단계. LLM span을 원페이퍼에 표시할 matched_slots로 변환합니다."""
     spans = body.get("spans") or []
     matched = []
     unmatched = []
     for span in spans:
         slot_id = span.get("slot_ref") or "other"
         span_type = span.get("type", "symptom")
+        if should_skip_active_symptom_ir(span):
+            unmatched.append(span)
+            continue
         if not is_symptom_like_span(span_type, slot_id):
             unmatched.append(span)
             continue
@@ -221,6 +226,17 @@ def match_slots(body):
     return {"matched_slots": matched, "unmatched_spans": unmatched}
 
 
+def should_skip_active_symptom_ir(span):
+    """호전/부재로 검증된 span은 현재 불편함 카드용 IR에서 제외합니다.
+
+    LLM이 "열은 내렸다", "두통은 없어졌다", "지금 열은 없다"처럼
+    호전/부재 맥락을 `progress_improved`, `symptom_absent`, `status=없음`
+    조합으로 태깅했다면, 해당 표현은 "오늘 말한 불편함" 카드로 올리지 않습니다.
+    대신 answers artifact와 clinical_clues에서 재진 경과/현재 부재 단서로 확인합니다.
+    """
+    return is_non_active_symptom_state(span)
+
+
 def slot_to_name(slot_id):
     if slot_id:
         indexed_name = get_symptom_name_by_id(slot_id)
@@ -232,12 +248,9 @@ def slot_to_name(slot_id):
 
 def make_symptom_match_explain(span, top):
     branch = top.get("retrieval_branch") or "hybrid"
-    bm25_score = top.get("bm25_score", 0)
-    vector_score = top.get("vector_score", 0)
-    label_score = top.get("label_score", 0)
     if branch == "safety_alias_override":
         return "안전 관련 핵심 표현이 있어 표준 증상 후보를 우선 매칭했습니다."
     return (
-        "환자 표현을 아산백과 기반 증상 인덱스와 비교했습니다. "
-        f"BM25 {bm25_score}, Titan 의미점수 {vector_score}, 표준명 유사도 {label_score}를 함께 반영했습니다."
+        "환자 표현을 아산백과 기반 증상 인덱스와 비교했고, "
+        "어휘 근거와 Titan 의미 벡터 근거가 함께 충족되어 표준 증상으로 매칭했습니다."
     )

@@ -1,20 +1,25 @@
-"""Runtime configuration and AWS clients.
+"""Lambda 런타임 설정과 AWS client 초기화.
 
-환경 변수, 데이터 파일 경로, boto3 client를 한 곳에서 초기화합니다.
-Lambda cold start 때 한 번 만들어진 client는 이후 호출에서 재사용됩니다.
+환경 변수, 데이터 파일 경로, boto3 client/resource를 한 곳에서 관리합니다.
+Lambda warm invocation에서는 모듈 전역 객체가 재사용되므로, AWS client를
+매 요청마다 다시 만들지 않습니다.
 """
 
-import os
 from pathlib import Path
+import os
 
 import boto3
 from botocore.config import Config
 
 
-# 배포 리전과 AWS 리소스 이름은 SAM template/env에서 주입됩니다.
+# 배포 리전과 핵심 저장소 이름은 SAM template에서 환경 변수로 주입합니다.
 REGION = os.environ.get("AWS_REGION", "ap-northeast-2")
 TABLE_NAME = os.environ.get("SESSIONS_TABLE", "MunjinSessions")
+ARTIFACTS_BUCKET = os.environ.get("ARTIFACTS_BUCKET", "")
 CUSTOM_VOCABULARY = os.environ.get("CUSTOM_VOCABULARY", "")
+
+# Bedrock 모델 라우팅입니다. 난도가 높은 의미 추출/검토는 Pro 계열,
+# 환자 안내문처럼 상대적으로 가벼운 변환은 Lite 계열을 기본값으로 둡니다.
 STRONG_MODEL_ID = os.environ.get("STRONG_MODEL_ID", "apac.amazon.nova-pro-v1:0")
 LIGHT_MODEL_ID = os.environ.get("LIGHT_MODEL_ID", "apac.amazon.nova-lite-v1:0")
 REVIEWER_MODEL_ID = os.environ.get("REVIEWER_MODEL_ID", STRONG_MODEL_ID)
@@ -39,11 +44,14 @@ HYBRID_VECTOR_WEIGHT = float(os.environ.get("HYBRID_VECTOR_WEIGHT", "0.65"))
 HYBRID_MIN_VECTOR_SCORE = float(os.environ.get("HYBRID_MIN_VECTOR_SCORE", "0.12"))
 HYBRID_MIN_BM25_SCORE = float(os.environ.get("HYBRID_MIN_BM25_SCORE", "0.04"))
 HYBRID_MIN_LABEL_SCORE = float(os.environ.get("HYBRID_MIN_LABEL_SCORE", "0.55"))
-EMBEDDING_CACHE_PATH = DATA_DIR / f"symptom_embeddings_{EMBEDDING_MODEL_ID.replace(':', '_').replace('/', '_')}_{EMBEDDING_DIMENSIONS}.json"
+EMBEDDING_CACHE_PATH = DATA_DIR / (
+    f"symptom_embeddings_{EMBEDDING_MODEL_ID.replace(':', '_').replace('/', '_')}_{EMBEDDING_DIMENSIONS}.json"
+)
 
-# boto3 client/resource는 모듈 전역에 두어 Lambda warm invocation에서 재사용합니다.
+# boto3 client/resource는 모듈 전역에서 생성해 Lambda cold start 비용을 줄입니다.
 ddb = boto3.resource("dynamodb", region_name=REGION)
 table = ddb.Table(TABLE_NAME)
+s3 = boto3.client("s3", region_name=REGION)
 bedrock_runtime = boto3.client(
     "bedrock-runtime",
     region_name=REGION,
