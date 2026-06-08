@@ -692,7 +692,7 @@
           <ul class="callout-list">
             <li>Q1: 주 증상/재진 경과 문항이라 Nova Pro를 사용합니다.</li>
             <li>Q2~Q4: Nova Lite를 사용하지만, 표준화와 의미 분해는 모두 수행합니다.</li>
-            <li>Q1, 재진 경과, 새 증상 문항에서 symptom-like span이 있으면 <code>/match</code>가 호출됩니다.</li>
+            <li>Q1, 재진 경과, 새 증상 문항에서 symptom-like span이 있으면 LangGraph 내부 <code>hybrid_ir_match</code> 노드가 실행됩니다.</li>
             <li>Q4의 환자 질문은 <code>structured.questions</code>와 원페이퍼 <code>agenda</code>로 이어집니다.</li>
           </ul>
         </div>
@@ -739,12 +739,10 @@
 │  ├─ template.yaml
 │  └─ src/
 │     ├─ handler.py
-│     ├─ common.py        # compatibility facade
 │     ├─ settings.py      # AWS/env 설정
 │     ├─ sessions.py      # DynamoDB session CRUD
 │     ├─ audio.py         # Transcribe Streaming URL, legacy upload 차단
 │     ├─ rag_context.py   # 원천 JSON 기반 RAG 참고 문맥
-│     ├─ extraction.py    # /extract 단독 테스트 호환 경로
 │     ├─ extraction_prompts.py
 │     ├─ extraction_schema.py # Pydantic 검증 adapter
 │     ├─ schemas/
@@ -788,7 +786,7 @@
           </div>
           <div class="mini-card tint-teal">
             <h3>백엔드 핵심</h3>
-            <p><code>handler.py</code>는 라우팅, 실제 로직은 <code>sessions.py</code>, <code>artifact_store.py</code>, <code>privacy.py</code>, <code>audio.py</code>, <code>extraction.py</code>, <code>retrieval.py</code>, <code>onepager.py</code>, <code>guide.py</code>로 나뉩니다.</p>
+            <p><code>handler.py</code>는 라우팅, 실제 로직은 <code>sessions.py</code>, <code>artifact_store.py</code>, <code>privacy.py</code>, <code>audio.py</code>, <code>pipeline_graph.py</code>, <code>pipeline_nodes.py</code>, <code>retrieval.py</code>, <code>onepager.py</code>, <code>guide.py</code>로 나뉩니다.</p>
           </div>
           <div class="mini-card tint-green">
             <h3>IR 데이터</h3>
@@ -995,24 +993,6 @@
             <td>LLM 추출, schema 검증, hybrid IR, 저장을 한 번에 실행</td>
           </tr>
           <tr>
-            <td><code>POST /extract</code></td>
-            <td>개발/디버그</td>
-            <td><code>extract_question</code></td>
-            <td>Nova 기반 표준화, span, clinical_clues, questions</td>
-          </tr>
-          <tr>
-            <td><code>POST /match</code></td>
-            <td>개발/디버그</td>
-            <td><code>match_slots</code></td>
-            <td>BM25 + Titan hybrid 증상 매칭</td>
-          </tr>
-          <tr>
-            <td><code>POST /validate</code></td>
-            <td>개발/디버그</td>
-            <td><code>validate_and_save</code></td>
-            <td>S3 <code>answers.redacted.json</code> 저장, DynamoDB 상태 반영</td>
-          </tr>
-          <tr>
             <td><code>GET /doctor/queue</code></td>
             <td>접수/의사 목록 화면</td>
             <td><code>list_sessions</code></td>
@@ -1154,7 +1134,7 @@
         </div>
         <p>
           원페이퍼의 증상 매칭은 LLM이 임의로 찍는 값이 아니라,
-          <code>/match</code>에서 BM25, Titan vector, 표준명/alias bridge를 함께 계산한 결과입니다.
+          LangGraph 내부 <code>hybrid_ir_match</code> 노드에서 BM25, Titan vector, 표준명/alias bridge를 함께 계산한 결과입니다.
           의료진 UI에는 숫자 confidence 대신 “매칭됨” 또는 “우선 확인” 같은 상태로 표시합니다.
         </p>
       </div>
@@ -1340,7 +1320,7 @@ symptom_embeddings_...json
         "alert": false
       }
     ],
-    "matched_slots": [ "... /match 결과" ],
+    "matched_slots": [ "... hybrid_ir_match 결과" ],
     "structured": {
       "standardized_text": "어제부터 목 불편감과 코막힘이 있음",
       "clinical_clues": [ "... 맥락 단서" ],

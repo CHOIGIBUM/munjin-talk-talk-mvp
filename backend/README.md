@@ -34,7 +34,6 @@ backend/
     ├── template.yaml
     └── src/
         ├── handler.py
-        ├── common.py
         ├── settings.py
         ├── artifact_store.py
         ├── privacy.py
@@ -46,7 +45,6 @@ backend/
         ├── pipeline_state.py
         ├── pipeline_trace.py
         ├── rag_context.py
-        ├── extraction.py
         ├── extraction_prompts.py
         ├── extraction_schema.py
         ├── langchain_prompting.py
@@ -313,7 +311,6 @@ S3 artifact는 `artifact_store.py`를 통해서만 읽고 씁니다. 저장 전 
 | 노드별 처리 | `serverless/src/pipeline_nodes.py` |
 | trace 구조 | `serverless/src/pipeline_trace.py` |
 | RAG 참고 문맥 | `serverless/src/rag_context.py` |
-| Bedrock extraction 디버그 | `serverless/src/extraction.py` |
 | extraction prompt | `serverless/src/extraction_prompts.py` |
 | extraction schema | `serverless/src/schemas/extraction.py` |
 | Hybrid IR | `serverless/src/retrieval.py` |

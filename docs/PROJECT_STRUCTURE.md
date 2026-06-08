@@ -207,7 +207,6 @@ backend/
 ```text
 backend/serverless/src/
 ├── handler.py
-├── common.py
 ├── settings.py
 ├── artifact_store.py
 ├── privacy.py
@@ -221,7 +220,6 @@ backend/serverless/src/
 ├── pipeline_state.py
 ├── pipeline_trace.py
 ├── rag_context.py
-├── extraction.py
 ├── extraction_prompts.py
 ├── extraction_schema.py
 ├── retrieval.py
@@ -243,7 +241,6 @@ backend/serverless/src/
 | 파일 | 역할 |
 | --- | --- |
 | `handler.py` | Lambda entrypoint. HTTP route 정의 |
-| `common.py` | 예전 import 호환용 facade |
 | `settings.py` | 환경 변수, AWS client, 모델 ID, 데이터 경로 |
 | `utils.py` | 응답, 시간, 텍스트 정리 공통 함수 |
 
@@ -293,7 +290,7 @@ backend/serverless/src/
 
 | 파일 | 역할 |
 | --- | --- |
-| `extraction.py` | `/extract` 단독 디버그용 Bedrock extraction 호환 경로 |
+| `extraction_prompts.py` | 문항별 Bedrock extraction prompt와 모델 라우팅 |
 | `extraction_schema.py` | runtime 보강, quote grounding, 문항 단위 검증 |
 | `schemas/extraction.py` | Pydantic fixed schema |
 

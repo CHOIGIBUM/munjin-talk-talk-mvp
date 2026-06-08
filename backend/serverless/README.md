@@ -98,7 +98,6 @@ backend/serverless/
 ├── template.yaml
 └── src/
     ├── handler.py
-    ├── common.py
     ├── settings.py
     ├── artifact_store.py
     ├── privacy.py
@@ -110,7 +109,6 @@ backend/serverless/
     ├── pipeline_state.py
     ├── pipeline_trace.py
     ├── rag_context.py
-    ├── extraction.py
     ├── extraction_prompts.py
     ├── extraction_schema.py
     ├── langchain_prompting.py
@@ -146,7 +144,6 @@ backend/serverless/
 | `pipeline_state.py` | LangGraph state 구조 |
 | `pipeline_trace.py` | active path와 trace 저장 |
 | `rag_context.py` | 원천 JSON과 제한 alias bridge 기반 RAG 참고 문맥 검색 |
-| `extraction.py` | `/extract` 단독 테스트용 Bedrock 의미 추출 호환 경로 |
 | `extraction_prompts.py` | Q별 영어 prompt |
 | `langchain_prompting.py` | LangChain PromptTemplate, Bedrock Runnable, JSON parser chain |
 | `llm.py` | LLM JSON 호출 호환 wrapper와 chain meta 반환 |
@@ -173,9 +170,6 @@ backend/serverless/
 | `GET` | `/doctor/queue` | 의사 대기열 조회 |
 | `POST` | `/transcribe-stream-url` | Transcribe Streaming URL 발급 |
 | `POST` | `/process-answer` | 환자 답변 처리 |
-| `POST` | `/extract` | extraction 단독 테스트 |
-| `POST` | `/match` | IR matching 단독 테스트 |
-| `POST` | `/validate` | validation 단독 테스트 |
 | `GET` | `/onepager/{session_id}` | 원페이퍼 조회 |
 | `POST` | `/doctor-response` | 의사 답변 및 강조사항 저장 |
 | `GET` | `/guide/{session_id}` | 환자 안내문 조회 |

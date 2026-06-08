@@ -63,13 +63,13 @@
 | STT 결과 텍스트 | `frontend/src/hooks/useSpeechCapture.js`, `backend/serverless/src/onepager.py` | 환자 발화 원문 텍스트 | DynamoDB `responses.Qx.text` | 건강정보 | 문진 원문이 DynamoDB에 누적됨 | 메모리 처리 후 S3 `answers.redacted.json` | 저장 전 가명처리. DynamoDB에는 완료 여부와 S3 key만 저장 |
 | Q별 의미 추출 | `backend/serverless/src/onepager.py`, `pipeline_graph.py`, `pipeline_nodes.py` | spans, source_quote, normalized_text, structured, clinical_clues, patient_questions | DynamoDB `question_results` | 건강정보 | LLM 추출 산출물이 DynamoDB에 직접 저장됨 | S3 `answers.redacted.json`, `trace.redacted.json` | 원문 quote는 S3로 이동. DynamoDB에는 question_status만 유지 |
 | 증상 IR 매칭 | `backend/serverless/src/retrieval.py` | matched_slots, symptom label, alias, rank_score, 근거 문구 | DynamoDB `onepager.symptom_slots` | 건강정보 | 매칭 근거와 quote가 DynamoDB에 저장됨 | S3 `onepaper.redacted.json`, `trace.redacted.json` | 화면 표시에 필요한 경우 API가 S3에서 읽어 반환. DDB에는 onepaper_ready만 저장 |
-| Safety Flag | `backend/serverless/src/safety.py`, `onepager.py` | 객혈, 피 표현 등 위험 플래그, risk | DynamoDB | 건강정보 요약 | 상세 원문이 함께 묶일 수 있음 | DynamoDB 요약 + S3 상세 | DynamoDB에는 risk level, flag code만 유지. 상세 근거는 S3 |
+| Safety Flag | `backend/serverless/src/clinical_terms.py`, `onepager.py`, `pipeline_nodes.py` | 객혈, 피 표현 등 위험 플래그, risk | DynamoDB | 건강정보 요약 | 상세 원문이 함께 묶일 수 있음 | DynamoDB 요약 + S3 상세 | DynamoDB에는 risk level, flag code만 유지. 상세 근거는 S3 |
 | 원페이퍼 생성 | `backend/serverless/src/onepager.py` `build_onepager` | 환자 요약, 증상 목록, 문진 맥락, 체크리스트, EMR 문장 | DynamoDB `onepager` | 건강정보 | 원페이퍼 전체가 DynamoDB에 저장됨 | S3 `onepaper.redacted.json` | DynamoDB에는 s3 key, ready status, risk 요약만 저장 |
 | 의사 답변 저장 | `backend/serverless/src/guide.py` `save_doctor_response` | 의사 답변, 환자 안내 강조사항, 추가 메모 | DynamoDB `doctor_review` | 건강정보 | 의사 입력 전문이 DynamoDB에 저장됨 | S3 `doctor_review.redacted.json` | DynamoDB에는 reviewed_at, guide_ready만 유지 |
 | 환자 안내문 생성 | `backend/serverless/src/guide.py` | patient_guide, 안내문 문장, 말로 재생할 문장 | DynamoDB `patient_guide` | 건강정보 | 환자 안내문 전체가 DynamoDB에 저장됨 | S3 `patient_guide.redacted.json` | DynamoDB에는 guide_ready, guide_s3_key만 유지 |
 | API 응답 | `backend/serverless/src/sessions.py` `public_session` | fullName, birthDate, phone, responses, onepager, privacyConsent | Frontend 응답 | 개인정보 + 건강정보 | 목록 조회 API가 많은 민감 데이터를 반환할 가능성 | 최소 응답 + 필요 시 권한별 artifact 조회 | public_session에서 직접식별자와 원문 응답 제거 |
 | CloudWatch 로그 | Lambda 전체 | 오류 메시지, payload 일부 가능성 | CloudWatch Logs | 잠재적 민감정보 | 예외 로그에 환자 발화가 섞이면 위험 | 로그 최소화 | session_id, route, error code 중심으로 로깅. 원문 텍스트 로그 금지 |
-| Bedrock 호출 | `bedrock_client.py`, `guide.py`, `pipeline_nodes.py` | 환자 발화, 구조화 JSON, 원페이퍼, 의사 답변 | 외부 AWS AI 서비스 호출 | 건강정보 | LLM 입력에 식별정보가 포함되면 위험 | 가명처리 payload만 전달 | 이름, 생년월일, 연락처 제거 후 호출. 모델 학습 opt-out 정책 별도 확인 |
+| Bedrock 호출 | `llm.py`, `langchain_prompting.py`, `guide.py`, `pipeline_nodes.py` | 환자 발화, 구조화 JSON, 원페이퍼, 의사 답변 | 외부 AWS AI 서비스 호출 | 건강정보 | LLM 입력에 식별정보가 포함되면 위험 | 가명처리 payload만 전달 | 이름, 생년월일, 연락처 제거 후 호출. 모델 학습 opt-out 정책 별도 확인 |
 | Macie 점검 | AWS 콘솔 설정 예정 | S3 객체의 민감정보 탐지 결과 | Macie | 보안 점검 데이터 | DynamoDB 직접 점검 도구가 아님 | S3 artifact bucket | S3로 이동된 문진 산출물에 Macie scan 적용 |
 
 ## 4. 필드별 전수조사 표

@@ -5,7 +5,6 @@
 정리하는 역할만 맡습니다.
 """
 
-import re
 from decimal import Decimal
 
 from clinical_terms import find_symptom_quote, is_symptom_like_span, slot_to_name
@@ -125,39 +124,6 @@ def agenda_label(category):
         "treatment_duration": "복약 기간",
         "followup_visit": "재내원 기준",
     }.get(category, "환자 질문")
-
-
-def build_review_items(slots, agenda, safety, clinical=None):
-    """Nova Pro review prompt에 넘길 약한 후보 checklist를 만듭니다.
-
-    이 후보는 의사 화면에 직접 저장하지 않습니다. Nova Pro가 전체 onepaper JSON을
-    읽고 검증 가능한 항목만 다시 생성하도록 돕는 참고 자료입니다.
-    """
-    items = []
-    if safety:
-        items.extend(["[우선] 객혈량과 시작 시점 확인", "[우선] 흉부 X-ray/객담 검사 고려"])
-    names = {slot.get("name") for slot in slots}
-    clinical_text = " ".join(
-        clean_quote(c.get("summary") or c.get("source_quote") or c.get("label") or "")
-        for c in (clinical or [])
-    )
-    if names & {"열", "발열"} or re.search(r"고열|발열|열", clinical_text):
-        items.append("발열 여부와 실제 체온 확인")
-    if "기침" in names or "가래" in names:
-        items.append("가래 동반 여부와 색깔")
-    if {"코막힘", "콧물", "재채기"} & names:
-        items.append("비폐색/콧물 지속 정도와 알레르기 병력 확인")
-    if any(c.get("label") == "건강보조제" for c in (clinical or [])):
-        items.append("복용 중인 영양제 종류와 병용 가능성 확인")
-    for item in agenda:
-        category = item.get("category") or item.get("type")
-        if category == "supplement_drug_interaction":
-            items.append("처방약과 영양제 병용 가능 여부 안내")
-        elif category == "followup_visit":
-            items.append("증상 악화 시 중간 재내원 기준 안내")
-        elif item.get("summary"):
-            items.append(item["summary"] + " 답변")
-    return unique(items) or ["문진 내용 직접 확인"]
 
 
 def build_transfer_text(patient, slots, clinical, agenda, visit_type):

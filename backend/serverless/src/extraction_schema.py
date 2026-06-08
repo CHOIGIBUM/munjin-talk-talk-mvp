@@ -1,8 +1,7 @@
 """Pydantic-backed validation for LLM extraction output.
 
-LangGraph의 `schema_quote_validation_node`와 `/extract` 단독 디버그 경로가
-공통으로 쓰는 얇은 adapter입니다. 실제 fixed schema는 `schemas/extraction.py`에
-있고, 여기서는 question_id 같은 런타임 기본값만 보강한 뒤 Pydantic 검증 결과를
+LangGraph의 `schema_quote_validation_node`가 쓰는 얇은 adapter입니다.
+실제 fixed schema는 `schemas/extraction.py`에 있고, 여기서는 question_id 같은 런타임 기본값만 보강한 뒤 Pydantic 검증 결과를
 파이프라인 형식으로 돌려줍니다.
 """
 

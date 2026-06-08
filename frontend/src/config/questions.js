@@ -6,7 +6,7 @@
 //   - onset / current_medications / adherence / patient_questions → Nova Lite 구조화
 
 // 환자 문진 질문 스키마입니다.
-// question_type은 백엔드 extract/match 프롬프트와 연결되므로 UI 문구를 바꿔도 이 값은 신중히 수정해야 합니다.
+// question_type은 백엔드 extraction prompt와 IR 분기 기준이므로 UI 문구를 바꿔도 이 값은 신중히 수정해야 합니다.
 export const QUESTIONS = {
   initial: [
     {

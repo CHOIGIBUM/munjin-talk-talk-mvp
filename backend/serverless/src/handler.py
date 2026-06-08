@@ -8,25 +8,12 @@
 import re
 from urllib.parse import unquote_plus
 
-from common import (
-    build_onepager,
-    create_session,
-    extract_question,
-    generate_streaming_transcribe_url,
-    get_guide,
-    get_onepager_payload,
-    get_session,
-    list_sessions,
-    match_slots,
-    parse_body,
-    process_answer,
-    public_session,
-    response,
-    save_doctor_response,
-    save_patient_consent,
-    update_session,
-    validate_and_save,
-)
+from audio import generate_streaming_transcribe_url
+from guide import get_guide, save_doctor_response
+from onepager import get_onepager_payload
+from orchestration import process_answer
+from sessions import create_session, get_session, list_sessions, public_session, save_patient_consent, update_session
+from utils import parse_body, response
 
 
 def handler(event, context):
@@ -79,18 +66,8 @@ def route(method, path, event):
         payload, err = generate_streaming_transcribe_url(body)
         return err or response(200, payload)
 
-    if method == "POST" and path == "/extract":
-        return response(200, extract_question(body))
-
     if method == "POST" and path == "/process-answer":
         payload, err = process_answer(body)
-        return err or response(200, payload)
-
-    if method == "POST" and path == "/match":
-        return response(200, match_slots(body))
-
-    if method == "POST" and path == "/validate":
-        payload, err = validate_and_save(body)
         return err or response(200, payload)
 
     if method == "GET" and path == "/doctor/queue":

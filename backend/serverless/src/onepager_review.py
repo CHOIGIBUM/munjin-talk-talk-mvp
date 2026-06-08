@@ -35,13 +35,13 @@ LOW_VALUE_NEGATIVE_TASK_PATTERNS = [
 ]
 
 
-def apply_bedrock_onepager_review(session, onepager, heuristic_review_candidates=None):
+def apply_bedrock_onepager_review(session, onepager):
     """Nova Pro review를 수행하고, 비어 있거나 근거 없는 결과면 제한 횟수만큼 재시도합니다."""
     last_error = ""
     attempts = max(1, REVIEW_RETRY_ATTEMPTS)
     for attempt in range(1, attempts + 1):
         try:
-            prompt = build_onepager_review_prompt(session, onepager, heuristic_review_candidates or [])
+            prompt = build_onepager_review_prompt(session, onepager)
             if last_error:
                 prompt += (
                     "\n\nPrevious final-review output failed validation: "
@@ -102,7 +102,7 @@ def merge_review_output(onepager, obj, raw_text, chain_meta, attempt):
     return reviewed
 
 
-def build_onepager_review_prompt(session, onepager, heuristic_candidates=None):
+def build_onepager_review_prompt(session, onepager):
     """의사가 볼 다음 행동 checklist를 만들도록 Nova Pro에 주는 프롬프트입니다."""
     payload = {
         "visit_type": visit_label(session.get("visit_type")),
@@ -117,7 +117,6 @@ def build_onepager_review_prompt(session, onepager, heuristic_candidates=None):
             if isinstance(value, dict)
         },
         "draft_onepager": onepager,
-        "heuristic_candidates_do_not_copy_blindly": heuristic_candidates or [],
     }
     return f"""
 You are a senior Korean outpatient physician preparing the next-step checklist before seeing this patient.
@@ -132,7 +131,6 @@ You will receive:
 - clinical_clues extracted from the conversation
 - patient agenda/questions from Q4
 - safety flags
-- heuristic_candidates_do_not_copy_blindly: rough code-generated candidates that may be incomplete or wrong
 
 Clinical tasking method:
 Before writing JSON, silently run this checklist. Do not output the checklist or your reasoning.
@@ -146,23 +144,22 @@ F. Which tasks are actually supported by the transcript? Remove unsupported gene
 Review item rules:
 1. Generate review_items as the doctor's next actions, not as labels or summaries.
 2. Each review_item must be grounded in at least one of: raw Q1-Q4 text, symptom_slots, clinical_clues, agenda, safety_flags, or matched_slots.ir_trace.
-3. Use heuristic candidates only as weak hints. If they are not supported, ignore them.
-4. Prefer concrete verbs: "확인", "질문", "안내", "상담", "검토", "평가". Avoid passive summaries.
-5. Avoid vague items such as "원인 규명", "진단 필요", "상태 평가" by themselves. Specify what to check or answer.
-6. Do NOT add fever/temperature tasks unless fever, heat, chill, high fever, antipyretic use, or body temperature appears in evidence.
-7. Do NOT add X-ray, TB, pneumonia, cancer, antibiotics, or lab/test tasks unless safety_flags, patient wording, or clinician agenda explicitly supports them.
-8. If Q4 contains patient questions, create one task per distinct question so the doctor can answer it.
+3. Prefer concrete verbs: "확인", "질문", "안내", "상담", "검토", "평가". Avoid passive summaries.
+4. Avoid vague items such as "원인 규명", "진단 필요", "상태 평가" by themselves. Specify what to check or answer.
+5. Do NOT add fever/temperature tasks unless fever, heat, chill, high fever, antipyretic use, or body temperature appears in evidence.
+6. Do NOT add X-ray, TB, pneumonia, cancer, antibiotics, or lab/test tasks unless safety_flags, patient wording, or clinician agenda explicitly supports them.
+7. If Q4 contains patient questions, create one task per distinct question so the doctor can answer it.
    - The task must preserve the same medication/food/test names as the agenda.
    - Never introduce new drug classes, sprays, tests, or disease names that are absent from the evidence.
-9. Do NOT turn negative answers into tasks by themselves.
+8. Do NOT turn negative answers into tasks by themselves.
    - "추가 질문 없음", "복용 약 없음", "새 증상 없음", or "발열 없음" may be mentioned in transfer_text, but should not become a review_item unless there is a conflict, safety issue, interaction concern, or follow-up action.
    - Avoid low-value tasks such as "현재 복용 중인 약이 없는지 재확인" or "환자가 추가 질문이 없는지 확인" when the only evidence is a negative answer.
-10. If medication/supplement/adherence appears, create a task only when it affects patient counseling, safety, interactions, or adherence.
-11. Use "[우선]" only when safety_flags is non-empty or the raw patient wording clearly describes a red flag. Ordinary sore throat, nasal obstruction, cough, or runny nose must not be marked urgent.
-12. Keep review_items short, Korean, and directly actionable. Good style: "콧물/코막힘 지속 정도와 알레르기 병력 확인".
-13. Preserve uncertainty. Do not assert unsupported diagnoses or treatment decisions.
-14. Return JSON only. No markdown, no prose outside JSON.
-15. The backend validates this with a strict Pydantic schema. Missing required fields, invalid keys, or extra fields will fail.
+9. If medication/supplement/adherence appears, create a task only when it affects patient counseling, safety, interactions, or adherence.
+10. Use "[우선]" only when safety_flags is non-empty or the raw patient wording clearly describes a red flag. Ordinary sore throat, nasal obstruction, cough, or runny nose must not be marked urgent.
+11. Keep review_items short, Korean, and directly actionable. Good style: "콧물/코막힘 지속 정도와 알레르기 병력 확인".
+12. Preserve uncertainty. Do not assert unsupported diagnoses or treatment decisions.
+13. Return JSON only. No markdown, no prose outside JSON.
+14. The backend validates this with a strict Pydantic schema. Missing required fields, invalid keys, or extra fields will fail.
 
 Output quality target:
 - Ordinary low-risk cases: 2 to 5 review_items.

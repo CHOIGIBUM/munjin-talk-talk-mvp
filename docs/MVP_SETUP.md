@@ -220,7 +220,7 @@ Environment variable:
 
 ---
 
-## 9. API 단독 테스트 예시
+## 9. 운영 API 확인 예시
 
 세션 생성:
 

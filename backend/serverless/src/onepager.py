@@ -22,7 +22,6 @@ from clinical_terms import find_safety_flag
 from onepager_review import apply_bedrock_onepager_review
 from onepager_sections import (
     build_clinical_clues,
-    build_review_items,
     build_transfer_text,
     dedupe_symptom_slots,
     normalize_agenda,
@@ -166,7 +165,6 @@ def build_onepager(session: dict[str, Any]) -> dict[str, Any]:
         " ".join([r.get("text", "") for r in responses.values() if isinstance(r, dict)]),
         q1.get("matched_slots", []) + q3.get("matched_slots", []),
     )
-    heuristic_review_candidates = build_review_items(slots, agenda, safety, clinical)
 
     onepager = {
         "patient_summary": build_patient_summary(patient, session, visit_type),
@@ -183,7 +181,7 @@ def build_onepager(session: dict[str, Any]) -> dict[str, Any]:
     should_run_final_review = bool(q4) or bool(safety)
     if responses and should_run_final_review:
         session_for_review = {**session, "responses": responses, "question_results": responses}
-        onepager = apply_bedrock_onepager_review(session_for_review, onepager, heuristic_review_candidates)
+        onepager = apply_bedrock_onepager_review(session_for_review, onepager)
     return onepager
 
 

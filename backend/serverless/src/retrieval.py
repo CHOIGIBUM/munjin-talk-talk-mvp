@@ -141,7 +141,7 @@ def is_hybrid_candidate_accepted(candidate):
     )
 
 def match_slots(body):
-    """`POST /match` 진입점. LLM span을 원페이퍼에 표시할 matched_slots로 변환합니다."""
+    """LangGraph 내부 IR 단계. LLM span을 원페이퍼에 표시할 matched_slots로 변환합니다."""
     spans = body.get("spans") or []
     matched = []
     unmatched = []

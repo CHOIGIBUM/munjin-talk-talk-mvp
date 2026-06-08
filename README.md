@@ -261,7 +261,8 @@ munjin-talk-talk-mvp/
 │           ├── pipeline_graph.py
 │           ├── pipeline_nodes.py
 │           ├── rag_context.py
-│           ├── extraction.py
+│           ├── extraction_prompts.py
+│           ├── extraction_schema.py
 │           ├── retrieval.py
 │           ├── onepager.py
 │           ├── guide.py

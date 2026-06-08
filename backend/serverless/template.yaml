@@ -113,24 +113,6 @@ Resources:
             ApiId: !Ref MunjinHttpApi
             Path: /process-answer
             Method: POST
-        Extract:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref MunjinHttpApi
-            Path: /extract
-            Method: POST
-        Match:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref MunjinHttpApi
-            Path: /match
-            Method: POST
-        Validate:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref MunjinHttpApi
-            Path: /validate
-            Method: POST
         DoctorQueue:
           Type: HttpApi
           Properties:
