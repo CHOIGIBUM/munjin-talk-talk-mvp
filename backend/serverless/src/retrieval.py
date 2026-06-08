@@ -232,12 +232,9 @@ def slot_to_name(slot_id):
 
 def make_symptom_match_explain(span, top):
     branch = top.get("retrieval_branch") or "hybrid"
-    bm25_score = top.get("bm25_score", 0)
-    vector_score = top.get("vector_score", 0)
-    label_score = top.get("label_score", 0)
     if branch == "safety_alias_override":
         return "안전 관련 핵심 표현이 있어 표준 증상 후보를 우선 매칭했습니다."
     return (
-        "환자 표현을 아산백과 기반 증상 인덱스와 비교했습니다. "
-        f"BM25 {bm25_score}, Titan 의미점수 {vector_score}, 표준명 유사도 {label_score}를 함께 반영했습니다."
+        "환자 표현을 아산백과 기반 증상 인덱스와 비교했고, "
+        "어휘 근거와 Titan 의미 벡터 근거가 함께 충족되어 표준 증상으로 매칭했습니다."
     )

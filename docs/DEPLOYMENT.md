@@ -67,7 +67,6 @@ sessions/YYYY-MM-DD/{session_id}/
   doctor_review.redacted.json
   patient_guide.redacted.json
   llm_trace.redacted.json
-  validation_trace.redacted.json
 ```
 
 필수 설정:

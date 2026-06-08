@@ -127,11 +127,10 @@ def save_patient_consent(session_id: str, body: dict[str, Any]) -> dict[str, Any
         "sensitive_items": body.get("sensitive_items") or [],
         "retention_notice": body.get("retention_notice") or "문진 산출물은 MVP 운영 정책에 따라 임시 보관 후 삭제됩니다.",
     }
-    consent_key = put_json(session, CONSENT_FILE, consent)
+    put_json(session, CONSENT_FILE, consent)
 
     updates = {
         "privacy_consent": consent_summary(consent),
-        "consent_key": consent_key,
     }
     if not accepted:
         updates["status"] = "consent_rejected"

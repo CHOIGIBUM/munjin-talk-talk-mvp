@@ -18,6 +18,7 @@ from artifact_store import (
     save_answers,
     save_trace,
 )
+from artifact_policy import prepare_artifact_payload
 from clinical_terms import find_safety_flag
 from onepager_review import apply_bedrock_onepager_review
 from onepager_sections import (
@@ -58,9 +59,6 @@ def validate_and_save(body: dict[str, Any]):
         "matched_slots": matched_slots,
         "structured": structured,
         "extract_method": body.get("method") or body.get("extract_method"),
-        "llm_meta": body.get("llm_meta") or {},
-        "orchestration": orchestration,
-        "pipeline_trace": pipeline_trace,
         "confirmed": True,
     }
 
@@ -69,8 +67,8 @@ def validate_and_save(body: dict[str, Any]):
     updated_base = {**session, "responses": answers, "question_results": answers, "risk": risk}
     onepager = build_onepager(updated_base)
 
-    answers_key = save_answers(session, answers)
-    onepaper_key = put_json(session, ONEPAPER_FILE, onepager)
+    save_answers(session, answers)
+    put_json(session, ONEPAPER_FILE, onepager)
     save_trace(
         session,
         question_id,
@@ -93,8 +91,6 @@ def validate_and_save(body: dict[str, Any]):
 
     updates = {
         "artifact": session.get("artifact") or artifact_meta(session_id, session.get("created_at")),
-        "answers_key": answers_key,
-        "onepaper_key": onepaper_key,
         "question_status": question_status,
         "risk": risk,
         "status": status,
@@ -131,11 +127,11 @@ def get_onepager_payload(session: dict[str, Any]) -> dict[str, Any]:
     onepager = get_json(session, ONEPAPER_FILE, default=None)
     if not isinstance(onepager, dict) or not onepager:
         onepager = build_onepager(session)
-        onepaper_key = put_json(session, ONEPAPER_FILE, onepager)
+        put_json(session, ONEPAPER_FILE, onepager)
         update_session(session.get("session_id"), {
-            "onepaper_key": onepaper_key,
             "onepager_ready": True,
         })
+    onepager = prepare_artifact_payload(ONEPAPER_FILE, onepager)
     responses = load_answers(session)
     return {
         "session": {

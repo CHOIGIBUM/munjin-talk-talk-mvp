@@ -7,6 +7,7 @@
 import hashlib
 from typing import Any
 
+from artifact_policy import sanitize_matched_slot, sanitize_span
 from clinical_terms import find_safety_flag
 from extraction_prompts import build_extraction_prompt, build_extraction_repair_note, select_extraction_model
 from extraction_schema import empty_structured, normalize_extraction_output
@@ -216,7 +217,10 @@ def schema_quote_validation_node(state: AnswerPipelineState) -> dict[str, Any]:
                 {
                     "error": "semantic_extraction_failed",
                     "message": extracted.get("error") or "LLM schema/quote validation failed after retries.",
-                    "llm_meta": extracted.get("llm_meta") or {},
+                    "details": {
+                        "attempts": attempt,
+                        "retry_loop": "langgraph_schema_quote_repair",
+                    },
                 },
             )
         }
@@ -358,7 +362,11 @@ def schema_quote_validation_node(state: AnswerPipelineState) -> dict[str, Any]:
             {
                 "error": "semantic_extraction_failed",
                 "message": extracted.get("error"),
-                "llm_meta": extracted.get("llm_meta") or {},
+                "details": {
+                    "attempts": attempt,
+                    "retry_loop": "langgraph_schema_quote_repair",
+                    "validation_error_count": len(validation_errors),
+                },
             },
         ),
     }
@@ -429,10 +437,30 @@ def hybrid_ir_match_node(state: AnswerPipelineState) -> dict[str, Any]:
                 "matched_count": len(matched.get("matched_slots") or []),
                 "unmatched_count": len(matched.get("unmatched_spans") or []),
                 "method": "bm25_titan_hybrid",
+                "accepted_matches": summarize_ir_matches(matched.get("matched_slots") or []),
             },
         )
     )
     return update
+
+
+def summarize_ir_matches(slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """감사용 trace에 남길 IR 확정 근거를 후보 목록 없이 요약합니다."""
+    summary = []
+    for slot in slots:
+        trace = slot.get("ir_trace") if isinstance(slot.get("ir_trace"), dict) else {}
+        summary.append({
+            "slot_id": slot.get("slot_id"),
+            "name": slot.get("name"),
+            "source_quote": slot.get("source_quote"),
+            "ir_method": slot.get("ir_method"),
+            "accept_reason": trace.get("accept_reason"),
+            "bm25_score": trace.get("bm25_score"),
+            "vector_score": trace.get("vector_score"),
+            "label_score": trace.get("label_score"),
+            "rank_score": trace.get("rank_score"),
+        })
+    return summary[:8]
 
 
 def session_validation_save_node(state: AnswerPipelineState) -> dict[str, Any]:
@@ -576,15 +604,27 @@ def response_payload_node(state: AnswerPipelineState) -> dict[str, Any]:
     )
     persist_final_trace(state, final_trace)
     payload = {
-        "spans": extracted.get("spans", []),
+        "spans": [sanitize_span(span) for span in extracted.get("spans", []) if isinstance(span, dict)],
         "structured": extracted.get("structured", {}),
-        "matched_slots": matched.get("matched_slots", []),
-        "unmatched_spans": matched.get("unmatched_spans", []),
+        "matched_slots": [
+            sanitize_matched_slot(slot)
+            for slot in matched.get("matched_slots", [])
+            if isinstance(slot, dict)
+        ],
+        "unmatched_spans": [
+            sanitize_span(span)
+            for span in matched.get("unmatched_spans", [])
+            if isinstance(span, dict)
+        ],
         "validator_passed": bool(validated.get("validator_passed")),
         "safety_flag": validated.get("safety_flag") or state.get("preliminary_safety_flag"),
         "errors": response_errors(state),
         "onepager_ready": validated.get("onepager_ready", False),
-        "orchestration": orchestration_snapshot(state, final_trace),
+        "pipeline": {
+            "graph": "munjin_langgraph_answer_pipeline",
+            "status": "completed",
+            "active_path": [entry["node"] for entry in final_trace if entry.get("node")],
+        },
     }
     update = {"result_payload": payload}
     update["trace"] = final_trace

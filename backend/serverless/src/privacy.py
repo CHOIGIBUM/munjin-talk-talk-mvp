@@ -18,6 +18,11 @@ PHONE_PATTERN = re.compile(r"01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}")
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 RRN_PATTERN = re.compile(r"\d{6}[-\s]?[1-4]\d{6}")
 BIRTH_DATE_PATTERN = re.compile(r"\b(?:19|20)\d{2}[-./년\s]?\d{1,2}[-./월\s]?\d{1,2}일?\b")
+BIRTH_CONTEXT_PATTERN = re.compile(
+    r"(생년월일|생일|출생일|태어난\s*날).{0,12}"
+    r"((?:19|20)\d{2}[-./년\s]?\d{1,2}[-./월\s]?\d{1,2}일?)"
+)
+DATE_REDACTION_KEYS = {"birth_date", "birthDate", "birthday", "dob", "생년월일", "생일", "출생일"}
 
 
 def age_band(age: Any) -> str:
@@ -59,7 +64,7 @@ def sanitize_reception_patient(patient_input: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def redact_text(text: Any) -> str:
+def redact_text(text: Any, *, redact_birth_date: bool = False) -> str:
     """저장용 텍스트에서 대표적인 직접식별정보 패턴을 제거합니다.
 
     한국어 의료 발화 전체를 완벽히 익명화하는 기능은 아닙니다. 이 함수는
@@ -70,19 +75,35 @@ def redact_text(text: Any) -> str:
     value = PHONE_PATTERN.sub("[연락처]", value)
     value = EMAIL_PATTERN.sub("[이메일]", value)
     value = RRN_PATTERN.sub("[주민번호]", value)
-    value = BIRTH_DATE_PATTERN.sub("[생년월일]", value)
+    if redact_birth_date:
+        value = BIRTH_DATE_PATTERN.sub("[생년월일]", value)
+    else:
+        value = BIRTH_CONTEXT_PATTERN.sub(lambda m: m.group(0).replace(m.group(2), "[생년월일]"), value)
     return value
 
 
-def redact_payload(payload: Any) -> Any:
-    """dict/list/string payload를 재귀적으로 가명처리합니다."""
+def redact_payload(payload: Any, key_context: str | None = None) -> Any:
+    """dict/list/string payload를 재귀적으로 가명처리합니다.
+
+    운영 시각(`recorded_at`, `stored_at`)이나 schema version에 들어간 날짜까지
+    생년월일로 오탐하지 않도록, 날짜형 마스킹은 birth 관련 key나 명시적 문맥에서만
+    수행합니다.
+    """
     if isinstance(payload, str):
-        return redact_text(payload)
+        return redact_text(payload, redact_birth_date=is_birth_key(key_context))
     if isinstance(payload, list):
-        return [redact_payload(item) for item in payload]
+        return [redact_payload(item, key_context) for item in payload]
     if isinstance(payload, dict):
-        return {key: redact_payload(value) for key, value in payload.items()}
+        return {key: redact_payload(value, str(key)) for key, value in payload.items()}
     return deepcopy(payload)
+
+
+def is_birth_key(key: str | None) -> bool:
+    """필드명만으로 생년월일임이 명확할 때 날짜 전체를 마스킹합니다."""
+    if not key:
+        return False
+    normalized = str(key).strip()
+    return normalized in DATE_REDACTION_KEYS or any(token in normalized.lower() for token in ("birth", "dob"))
 
 
 def consent_summary(consent: dict[str, Any]) -> dict[str, Any]:

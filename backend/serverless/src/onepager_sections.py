@@ -1,18 +1,16 @@
 """Onepaper section builders.
 
-원페이퍼 화면에 보이는 각 영역을 만드는 순수 조립 함수들입니다.
-세션 저장이나 Bedrock 호출은 하지 않고, 이미 저장된 responses를 화면용 JSON으로
-정리하는 역할만 맡습니다.
+S3에 저장된 문항 결과를 의사 화면에서 읽기 쉬운 카드 구조로 바꿉니다.
+화면용 onepaper에는 내부 IR 숫자 점수와 후보 목록을 남기지 않습니다. 매칭
+근거가 필요할 때는 별도 `llm_trace.redacted.json`의 최소 설명 trace를 봅니다.
 """
-
-from decimal import Decimal
 
 from clinical_terms import find_symptom_quote, is_symptom_like_span, slot_to_name
 from utils import clean_quote, unique, visit_label
 
 
 def slot_to_symptom_slot(slot, qid, transcript=""):
-    """IR matched_slot을 원페이퍼 증상 카드 schema로 바꿉니다."""
+    """IR matched_slot을 원페이퍼 증상 카드 schema로 변환합니다."""
     slot_id = slot.get("slot_id") or slot.get("slot_ref")
     span_type = slot.get("span_type") or slot.get("type") or "symptom"
     if not is_symptom_like_span(span_type, slot_id):
@@ -22,8 +20,6 @@ def slot_to_symptom_slot(slot, qid, transcript=""):
     if not source_quote and transcript and slot_id:
         source_quote = find_symptom_quote(transcript, slot_id, [slot.get("name", "")]) or source_quote
 
-    score = coerce_decimal(slot.get("score", Decimal("0")))
-
     return {
         "slot_id": slot_id,
         "name": slot.get("name") or slot_to_name(slot_id),
@@ -31,29 +27,27 @@ def slot_to_symptom_slot(slot, qid, transcript=""):
         "source_quote": source_quote,
         "normalized_text": slot.get("normalized_text") or slot.get("name") or "",
         "status": slot.get("status") or "있음",
-        "score": score,
         "alert": bool(slot.get("alert")),
-        "explain": slot.get("explain") or "환자 발화에서 증상 표현을 확인했습니다.",
+        "explain": slot.get("explain") or "환자 발화에서 증상 표현이 확인되었습니다.",
         "ir_method": slot.get("ir_method"),
-        "ir_trace": slot.get("ir_trace") or {},
     }
 
 
 def dedupe_symptom_slots(slots):
-    """같은 표준 증상이 여러 문항에서 나오면 점수가 높은 카드만 남깁니다."""
+    """같은 표준 증상이 여러 문항에서 나오면 더 중요한 카드만 남깁니다."""
     by_key = {}
     for slot in slots:
         key = slot.get("slot_id") or slot.get("name")
         if not key:
             continue
         old = by_key.get(key)
-        if not old or Decimal(str(slot.get("score", 0))) >= Decimal(str(old.get("score", 0))):
+        if not old or (slot.get("alert") and not old.get("alert")):
             by_key[key] = slot
     return list(by_key.values())
 
 
 def build_clinical_clues(q1, q2, q3, visit_type):
-    """LLM이 만들고 schema 검증을 통과한 clinical_clues만 원페이퍼 단서로 사용합니다."""
+    """LLM schema 검증을 통과한 clinical_clues만 원페이퍼 단서로 사용합니다."""
     structured_clues = []
     for qid, q in (("Q1", q1), ("Q2", q2), ("Q3", q3)):
         for item in ((q.get("structured") or {}).get("clinical_clues") or []):
@@ -71,7 +65,7 @@ def normalize_clinical_clue(item, default_qid):
     source_quote = clean_quote(item.get("source_quote") or summary)
     if not summary and not source_quote:
         return None
-    label = clean_quote(item.get("label") or "문진단서")
+    label = clean_quote(item.get("label") or "문진 단서")
     return {
         "id": item.get("id") or f"{default_qid}-{label}-{source_quote}",
         "category": clean_quote(item.get("category") or "증상맥락"),
@@ -87,7 +81,7 @@ def normalize_clinical_clue(item, default_qid):
 
 
 def unique_clues(clues):
-    """동일한 clinical clue가 중복 표시되지 않게 정리합니다."""
+    """동일한 clinical clue가 중복 표시되지 않도록 정리합니다."""
     out = []
     seen = set()
     for item in clues:
@@ -102,7 +96,7 @@ def unique_clues(clues):
 
 
 def normalize_agenda(q4):
-    """Q4 patient questions를 원페이퍼 오른쪽 질문 카드 목록으로 변환합니다."""
+    """Q4 patient questions를 원페이퍼 우측 질문 카드 목록으로 변환합니다."""
     structured = q4.get("structured", {})
     questions = structured.get("questions") or q4.get("questions") or []
     return [{
@@ -123,11 +117,13 @@ def agenda_label(category):
         "food_drug_interaction": "음식-약 상호작용",
         "treatment_duration": "복약 기간",
         "followup_visit": "재내원 기준",
+        "test_question": "검사 질문",
+        "lifestyle": "생활관리 질문",
     }.get(category, "환자 질문")
 
 
 def build_transfer_text(patient, slots, clinical, agenda, visit_type):
-    """EMR 복사용 초안 문장을 원페이퍼 JSON 근거만으로 만듭니다."""
+    """EMR 복사용 초안 문장을 onepaper JSON 근거만으로 만듭니다."""
     symptoms = ", ".join(unique([slot.get("name") for slot in slots if slot.get("name")]))
     text = f"{patient.get('age') or '-'}세 {patient.get('gender') or ''} {visit_label(visit_type)} 환자."
     if symptoms:
@@ -138,11 +134,3 @@ def build_transfer_text(patient, slots, clinical, agenda, visit_type):
     if agenda:
         text += f" 환자 질문: {agenda[0].get('summary')}."
     return text
-
-
-def coerce_decimal(value):
-    """DynamoDB Decimal/float/string 값을 원페이퍼 점수 Decimal로 맞춥니다."""
-    try:
-        return Decimal(str(value))
-    except Exception:
-        return Decimal("0")

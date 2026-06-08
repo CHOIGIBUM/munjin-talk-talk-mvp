@@ -1,9 +1,9 @@
 """S3 기반 문진 산출물 저장소.
 
-DynamoDB는 대기열과 상태 조회용 최소 메타데이터만 보관하고, 환자 발화,
-LLM 추출 결과, 원페이퍼, 환자 안내문처럼 큰 의료 문진 JSON은 이 모듈을
-통해 S3에 저장합니다. 프론트엔드는 S3에 직접 접근하지 않고 Lambda API를
-통해 필요한 산출물만 받습니다.
+DynamoDB에는 대기열과 상태 조회에 필요한 최소 메타데이터만 남깁니다.
+문진 답변, 원페이퍼, 의사 답변, 환자 안내문, 최소 설명 trace는 이 모듈을
+통해서만 S3에 저장합니다. 저장 직전 `artifact_policy.py`가 파일 종류별로
+운영에 필요한 필드만 남기고, `privacy.py`가 직접식별정보 패턴을 가명처리합니다.
 """
 
 from __future__ import annotations
@@ -14,18 +14,18 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 
+from artifact_policy import (
+    ANSWER_FILE,
+    CONSENT_FILE,
+    DOCTOR_REVIEW_FILE,
+    GUIDE_FILE,
+    ONEPAPER_FILE,
+    TRACE_FILE,
+    prepare_artifact_payload,
+)
 from privacy import redact_payload
 from settings import ARTIFACTS_BUCKET, s3
 from utils import json_default, now_iso
-
-
-ANSWER_FILE = "answers.redacted.json"
-CONSENT_FILE = "consent.json"
-DOCTOR_REVIEW_FILE = "doctor_review.redacted.json"
-GUIDE_FILE = "patient_guide.redacted.json"
-ONEPAPER_FILE = "onepaper.redacted.json"
-TRACE_FILE = "llm_trace.redacted.json"
-VALIDATION_TRACE_FILE = "validation_trace.redacted.json"
 
 
 def require_bucket() -> str:
@@ -61,7 +61,6 @@ def artifact_meta(session_id: str, created_at: str | None = None) -> dict[str, A
         "guide_key": prefix + GUIDE_FILE,
         "consent_key": prefix + CONSENT_FILE,
         "trace_key": prefix + TRACE_FILE,
-        "validation_trace_key": prefix + VALIDATION_TRACE_FILE,
     }
 
 
@@ -73,14 +72,15 @@ def key_for(session: dict[str, Any], filename: str) -> str:
 
 
 def put_json(session: dict[str, Any], filename: str, payload: Any) -> str:
-    """payload를 가명처리한 뒤 S3 JSON 객체로 저장하고 key를 반환합니다."""
+    """payload를 운영 저장 정책과 가명처리를 거쳐 S3 JSON 객체로 저장합니다."""
     bucket = require_bucket()
     key = key_for(session, filename)
+    cleaned_payload = prepare_artifact_payload(filename, payload)
     body = json.dumps(
         {
             "stored_at": now_iso(),
             "schema_version": "munjin-artifact-v1",
-            "payload": redact_payload(payload),
+            "payload": redact_payload(cleaned_payload),
         },
         ensure_ascii=False,
         default=json_default,
@@ -113,17 +113,17 @@ def load_answers(session: dict[str, Any]) -> dict[str, Any]:
     """문항별 답변 artifact를 읽고, 과거 DDB 저장 구조가 있으면 fallback합니다."""
     answers = get_json(session, ANSWER_FILE, default=None)
     if isinstance(answers, dict):
-        return answers
-    return dict(session.get("responses") or session.get("question_results") or {})
+        return prepare_artifact_payload(ANSWER_FILE, answers)
+    return prepare_artifact_payload(ANSWER_FILE, dict(session.get("responses") or session.get("question_results") or {}))
 
 
 def save_answers(session: dict[str, Any], answers: dict[str, Any]) -> str:
-    """문항별 답변/추출/IR 결과를 S3에 저장합니다."""
+    """문항별 답변/추출/IR 결과를 운영용 형태로 S3에 저장합니다."""
     return put_json(session, ANSWER_FILE, answers)
 
 
 def save_trace(session: dict[str, Any], question_id: str, trace_payload: dict[str, Any]) -> str:
-    """질문별 LLM/검증 trace를 S3에 누적 저장합니다."""
+    """질문별 LLM/검증 trace를 최소 설명용 형태로 S3에 누적 저장합니다."""
     traces = get_json(session, TRACE_FILE, default={})
     if not isinstance(traces, dict):
         traces = {}
@@ -131,14 +131,11 @@ def save_trace(session: dict[str, Any], question_id: str, trace_payload: dict[st
     return put_json(session, TRACE_FILE, traces)
 
 
-def update_question_trace(session: dict[str, Any], question_id: str, orchestration: dict[str, Any], trace: list[dict[str, Any]]) -> None:
-    """이미 저장된 답변 artifact에 최종 LangGraph trace를 반영합니다."""
-    answers = load_answers(session)
-    record = dict(answers.get(question_id) or {})
-    if not record:
-        return
-    record["orchestration"] = orchestration
-    record["pipeline_trace"] = trace
-    answers[question_id] = record
-    save_answers(session, answers)
+def update_question_trace(
+    session: dict[str, Any],
+    question_id: str,
+    orchestration: dict[str, Any],
+    trace: list[dict[str, Any]],
+) -> None:
+    """최종 LangGraph trace는 답변 artifact가 아니라 별도 최소 trace에만 반영합니다."""
     save_trace(session, question_id, {"orchestration": orchestration, "pipeline_trace": trace})

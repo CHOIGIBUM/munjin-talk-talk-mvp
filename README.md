@@ -97,7 +97,7 @@
 - EMR 복사용 문장
 - 환자 안내 강조사항
 
-증상 카드에는 의료진이 오해할 수 있는 숫자 confidence를 표시하지 않습니다. 내부 trace에는 BM25, vector, label, rank score가 남지만, UI에는 “매칭됨” 또는 “우선 확인”처럼 확인 중심 상태만 표시합니다.
+증상 카드에는 의료진이 오해할 수 있는 숫자 confidence나 내부 IR 점수를 표시하지 않습니다. 운영용 onepaper JSON에도 점수와 후보 목록을 저장하지 않고, UI에는 “매칭됨” 또는 “우선 확인”처럼 확인 중심 상태만 표시합니다.
 
 ### 환자 안내문
 
@@ -176,8 +176,8 @@ flowchart LR
 | RAG 참고 컨텍스트 | 로컬 reference retriever | 원천 JSON과 제한 alias bridge에서 표준화 참고 문맥 검색 | 환자 사실로 직접 채택하지 않음 |
 | 의미 추출 | Bedrock Nova Pro/Lite | 문항별 발화를 schema에 맞게 구조화 | Pydantic, enum, source_quote 검증 |
 | LLM 호출 chain | LangChain Core | PromptTemplate, Bedrock Runnable, JSON parser 구성 | chain meta와 parser 경로 추적 |
-| 파이프라인 제어 | LangGraph | 노드 순서, RAG, parser/validator, retry 분기, trace 관리 | active_path와 pipeline_trace 저장 |
-| 증상 매칭 | BM25 + Titan Vector Hybrid IR | LLM 증상 후보를 표준 증상명과 매칭 | threshold와 ir_trace 기록 |
+| 파이프라인 제어 | LangGraph | 노드 순서, RAG, parser/validator, retry 분기, trace 관리 | 최소 active_path와 node event만 감사 trace에 저장 |
+| 증상 매칭 | BM25 + Titan Vector Hybrid IR | LLM 증상 후보를 표준 증상명과 매칭 | 운영 artifact에는 점수 제거, 감사 trace에는 확정 근거만 요약 |
 | 원페이퍼 리뷰 | Bedrock Nova Pro | 의료진 확인 항목과 EMR 초안 보강 | review schema 검증 |
 | 안내문 변환 | Bedrock Nova Lite | 의사 답변을 환자용 안내문으로 변환 | guide schema 검증 |
 
@@ -220,10 +220,11 @@ backend/serverless/src/data/symptom_embeddings_amazon.titan-embed-text-v2_0_512.
 4. BM25로 lexical 유사도를 계산합니다.
 5. Titan embedding으로 semantic 유사도를 계산합니다.
 6. 표준 증상명 또는 제한된 alias bridge가 직접 맞는 경우 label score를 보조 반영합니다.
-7. threshold를 통과한 후보만 `matched_slots`에 저장합니다.
-8. 검토용 `ir_trace`에는 BM25, vector, label, rank score를 남깁니다.
+7. threshold를 통과한 후보만 운영용 `matched_slots`에 남깁니다.
+8. 운영용 `answers.redacted.json`과 `onepaper.redacted.json`에는 숫자 점수, 후보 목록, prompt/response 전문을 저장하지 않습니다.
+9. 법적·품질 이슈가 생겼을 때를 위해 `llm_trace.redacted.json`에는 실행 노드, 사용 모델, validator 통과 여부, 확정 IR 근거 요약만 남깁니다.
 
-의료진 UI에는 숫자 점수를 직접 노출하지 않습니다. 숫자는 내부 검토와 디버깅용 trace로만 사용합니다.
+의료진 UI와 운영 onepaper에는 숫자 점수를 직접 노출하지 않습니다. 숫자는 IR 내부 계산과 최소 감사 trace의 근거 요약에만 제한적으로 사용합니다.
 
 ---
 
@@ -234,7 +235,7 @@ backend/serverless/src/data/symptom_embeddings_amazon.titan-embed-text-v2_0_512.
 | 저장소 | 저장하는 값 | 저장하지 않는 값 |
 | --- | --- | --- |
 | DynamoDB | `session_id`, 대기 순번, 상태, 마스킹 환자명, 연령대, 성별, 진료과, S3 artifact key | 실명, 생년월일, 연락처, 문항별 원문, 원페이퍼 전체, 환자 안내문 |
-| S3 artifact bucket | 가명처리된 `answers.redacted.json`, `onepaper.redacted.json`, `doctor_review.redacted.json`, `patient_guide.redacted.json`, trace JSON | 음성 원본 파일 |
+| S3 artifact bucket | 가명처리된 운영 artifact와 최소 설명 trace: `answers.redacted.json`, `onepaper.redacted.json`, `doctor_review.redacted.json`, `patient_guide.redacted.json`, `llm_trace.redacted.json` | 음성 원본 파일, prompt 전문, LLM raw response, 전체 후보 목록 |
 
 음성 원본 파일은 저장하지 않습니다. 브라우저가 Amazon Transcribe Streaming으로 음성을 직접 전송하고, 확정된 텍스트만 백엔드 파이프라인으로 전달합니다.
 
@@ -401,7 +402,7 @@ Windows에서 PowerShell 실행 정책 때문에 `npm`이 막히면 `npm.cmd`를
 
 ## 12. 개인정보와 보안 주의사항
 
-현재 저장소는 MVP 검증용입니다. 실제 환자 데이터로 공개 테스트하기 전 다음 항목이 필요합니다.
+현재 저장소는 연구·시연 목적의 MVP입니다. 실제 환자 데이터로 공개 테스트하기 전 다음 항목이 필요합니다.
 
 - 직원/의사 화면 인증
 - 역할 기반 접근 제어

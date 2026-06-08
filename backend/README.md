@@ -149,7 +149,7 @@ serverless/src/llm.py
 
 - Bedrock `converse` API에 맞는 message 구성
 - PromptTemplate, Bedrock Runnable, JSON parser를 한 체인으로 연결
-- parser 종류와 raw 응답 hash를 `llm_meta.langchain`에 기록
+- parser 종류와 raw 응답 hash를 운영 artifact가 아닌 최소 설명 trace에 기록
 - 향후 dialect RAG, retriever, output parser 확장을 위한 연결 지점 제공
 
 ---
@@ -210,10 +210,11 @@ serverless/src/data/symptom_embeddings_amazon.titan-embed-text-v2_0_512.json
 3. BM25 lexical score를 계산합니다.
 4. Titan embedding cosine similarity를 계산합니다.
 5. 표준 증상명과 제한적 alias bridge를 label score로 반영합니다.
-6. vector 중심 threshold를 통과한 후보만 `matched_slots`로 저장합니다.
-7. 내부 검토용 `ir_trace`에 각 점수를 저장합니다.
+6. vector 중심 threshold를 통과한 후보만 운영용 `matched_slots`로 저장합니다.
+7. 운영용 답변/원페이퍼 artifact에는 숫자 점수와 후보 목록을 제거합니다.
+8. 최소 설명 trace에는 확정된 매칭의 BM25/vector/label/rank 근거 요약만 남깁니다.
 
-의료진 UI에는 숫자 점수를 표시하지 않습니다. 숫자형 score는 내부 디버깅과 trace 분석을 위한 값입니다.
+의료진 UI에는 숫자 점수를 표시하지 않습니다. 숫자형 score는 내부 계산과 감사용 최소 trace에서만 제한적으로 사용합니다.
 
 ---
 
@@ -283,7 +284,6 @@ sessions/YYYY-MM-DD/{session_id}/
   doctor_review.redacted.json
   patient_guide.redacted.json
   llm_trace.redacted.json
-  validation_trace.redacted.json
 ```
 
 ### 저장하지 않는 값
@@ -295,7 +295,7 @@ sessions/YYYY-MM-DD/{session_id}/
 연락처 원문
 ```
 
-S3 artifact는 `artifact_store.py`를 통해서만 읽고 씁니다. 저장 전 `privacy.py`의 가명처리 helper가 연락처, 주민번호, 이메일, 생년월일 형태의 직접식별정보를 1차 마스킹합니다. 운영 환경에서는 S3 Block Public Access, Lifecycle, KMS, Macie 점검을 함께 적용해야 합니다.
+S3 artifact는 `artifact_store.py`를 통해서만 읽고 씁니다. 저장 직전 `artifact_policy.py`가 운영에 필요한 필드만 남기고, `privacy.py`의 가명처리 helper가 연락처, 주민번호, 이메일, 생년월일 형태의 직접식별정보를 1차 마스킹합니다. 운영 환경에서는 S3 Block Public Access, Lifecycle, KMS, Macie 점검을 함께 적용해야 합니다.
 
 ---
 
@@ -306,6 +306,7 @@ S3 artifact는 `artifact_store.py`를 통해서만 읽고 씁니다. 저장 전 
 | API endpoint | `serverless/src/handler.py` |
 | 환경 변수와 모델 ID | `serverless/src/settings.py` |
 | S3 artifact 저장 | `serverless/src/artifact_store.py` |
+| artifact 최소화 정책 | `serverless/src/artifact_policy.py` |
 | 개인정보 최소화 | `serverless/src/privacy.py` |
 | 전체 파이프라인 | `serverless/src/pipeline_graph.py` |
 | 노드별 처리 | `serverless/src/pipeline_nodes.py` |

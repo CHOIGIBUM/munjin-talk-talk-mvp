@@ -84,7 +84,7 @@
 - S3 `answers.redacted.json`
 - LLM extraction schema
 - Hybrid IR `matched_slots`
-- `ir_trace`
+- 최소 설명 trace `llm_trace.redacted.json`
 - `onepager`
 - S3 `patient_guide.redacted.json`
 - Pydantic validation error 구조

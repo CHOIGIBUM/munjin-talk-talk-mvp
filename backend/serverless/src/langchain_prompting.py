@@ -96,7 +96,7 @@ def _parse_bedrock_json_response(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_bedrock_messages(prompt: str) -> list[dict[str, Any]]:
-    """Bedrock Converse message만 필요한 기존/테스트 코드용 호환 함수입니다."""
+    """Bedrock Converse message만 필요한 보조 경로에서 재사용하는 함수입니다."""
     chat_prompt = ChatPromptTemplate.from_messages([("human", "{prompt}")])
     prompt_value = chat_prompt.invoke({"prompt": prompt or ""})
     return [_to_bedrock_message(message) for message in prompt_value.to_messages()]

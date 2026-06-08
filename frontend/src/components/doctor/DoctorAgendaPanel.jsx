@@ -88,7 +88,7 @@ export default function DoctorAgendaPanel({ sessionData, submitStatus, onSubmit 
           </span>
           <div className="dap-quote-meta-v4">
             <b>환자 발화 원문</b>
-            <small>Q4 전체 — AI 분류 검증용</small>
+            <small>Q4 전체 — AI 분류 확인</small>
           </div>
         </div>
         <p className="dap-quote-content-v4">

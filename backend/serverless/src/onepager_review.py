@@ -143,7 +143,7 @@ F. Which tasks are actually supported by the transcript? Remove unsupported gene
 
 Review item rules:
 1. Generate review_items as the doctor's next actions, not as labels or summaries.
-2. Each review_item must be grounded in at least one of: raw Q1-Q4 text, symptom_slots, clinical_clues, agenda, safety_flags, or matched_slots.ir_trace.
+2. Each review_item must be grounded in at least one of: raw Q1-Q4 text, symptom_slots, clinical_clues, agenda, or safety_flags.
 3. Prefer concrete verbs: "확인", "질문", "안내", "상담", "검토", "평가". Avoid passive summaries.
 4. Avoid vague items such as "원인 규명", "진단 필요", "상태 평가" by themselves. Specify what to check or answer.
 5. Do NOT add fever/temperature tasks unless fever, heat, chill, high fever, antipyretic use, or body temperature appears in evidence.

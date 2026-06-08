@@ -72,21 +72,25 @@ def generate_streaming_transcribe_url(body):
     SigV4QueryAuth(credentials, "transcribe", REGION, expires=300).add_auth(request)
     stream_url = request.url.replace("https://", "wss://", 1)
 
-    streaming = session.get("streaming_stt", {})
-    streaming[question_id] = {
-        "provider": "amazon_transcribe_streaming",
-        "language_code": "ko-KR",
-        "sample_rate": sample_rate,
-        "media_encoding": "pcm",
-        "audio_stored": False,
-    }
-    update_session(session_id, {"streaming_stt": streaming, "status": "in_progress"})
+    # DynamoDB에는 실제 음성이나 전사 원문을 저장하지 않고,
+    # 감사 시 확인할 수 있는 "스트리밍 사용/음성 미저장" 정책 상태만 남긴다.
+    update_session(
+        session_id,
+        {
+            "audio_policy": {
+                "provider": "amazon_transcribe_streaming",
+                "mode": "streaming",
+                "audio_storage": "not_stored",
+                "last_question_id": question_id,
+            },
+            "status": "in_progress",
+        },
+    )
 
     return {
         "stream_url": stream_url,
         "sample_rate": sample_rate,
         "media_encoding": "pcm",
         "language_code": "ko-KR",
-        "audio_stored": False,
         "expires_in": 300,
     }, None

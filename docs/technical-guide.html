@@ -1052,13 +1052,13 @@
             <td>RAG 참고 문맥</td>
             <td>Local reference retriever</td>
             <td>원천 JSON과 제한 alias bridge에서 표준화 참고 문맥 검색. 환자 사실로 직접 채택하지 않음</td>
-            <td><code>llm_meta.rag_context</code>, <code>pipeline_trace</code></td>
+            <td>S3 <code>llm_trace.redacted.json</code>의 최소 trace</td>
           </tr>
           <tr>
             <td>LLM 호출 체인</td>
             <td>LangChain Core Runnable</td>
             <td><code>ChatPromptTemplate -> Bedrock RunnableLambda -> JsonOutputParser</code>로 Nova 호출과 parser를 trace</td>
-            <td><code>llm_meta.langchain</code></td>
+            <td>S3 <code>llm_trace.redacted.json</code>의 model/parser 요약</td>
           </tr>
           <tr>
             <td>Q1 의미 분해</td>
@@ -1082,7 +1082,7 @@
             <td>증상 IR</td>
             <td>BM25 + Titan embedding</td>
             <td>LLM이 추출한 증상 span을 실제 표준 증상 문서와 매칭</td>
-            <td><code>matched_slots</code>, <code>ir_trace</code></td>
+            <td>운영 <code>matched_slots</code>, 감사용 <code>llm_trace.redacted.json</code></td>
           </tr>
           <tr>
             <td>의사용 task 생성</td>
@@ -1130,10 +1130,10 @@
       <div class="section-title">
         <div>
           <p class="kicker">Symptom Retrieval</p>
-          <h2>8. 증상 매칭과 점수 계산</h2>
+          <h2>8. 증상 매칭과 내부 근거 계산</h2>
         </div>
         <p>
-          원페이퍼의 증상 매칭은 LLM이 임의로 찍는 값이 아니라,
+          원페이퍼의 증상 매칭은 LLM이 임의로 확신도를 찍는 값이 아니라,
           LangGraph 내부 <code>hybrid_ir_match</code> 노드에서 BM25, Titan vector, 표준명/alias bridge를 함께 계산한 결과입니다.
           의료진 UI에는 숫자 confidence 대신 “매칭됨” 또는 “우선 확인” 같은 상태로 표시합니다.
         </p>
@@ -1165,7 +1165,7 @@ symptom_embeddings_...json
         </div>
       </div>
 
-      <h3 class="schema-title">8-2. 점수에 들어가는 요소</h3>
+      <h3 class="schema-title">8-2. 내부 계산 요소</h3>
       <table>
         <thead>
           <tr>
@@ -1195,11 +1195,6 @@ symptom_embeddings_...json
             <td>후보 정렬용 종합 점수</td>
             <td>BM25 0.35, vector 0.65, label hint를 함께 반영</td>
           </tr>
-          <tr>
-            <td><code>score</code></td>
-            <td>내부 호환용 매칭 강도 값. LLM confidence가 아니며 의료진 UI에는 숫자로 표시하지 않음</td>
-            <td>S3 trace와 디버깅용 JSON에서만 확인</td>
-          </tr>
         </tbody>
       </table>
 
@@ -1207,11 +1202,11 @@ symptom_embeddings_...json
         LLM이 “이건 기침이다”라고 말하면 끝나는 구조가 아닙니다.
         LLM의 <code>slot_ref</code>는 검색 질의의 힌트이고, 최종 표준 증상명은 BM25 + Titan 검색 후보 중에서 선택됩니다.
         다만 <code>preferred_alias</code>가 강하게 맞으면 후보 정렬이 크게 영향을 받을 수 있으므로,
-        이상하면 S3 <code>answers.redacted.json</code> 또는 <code>llm_trace.redacted.json</code>의
-        <code>ir_trace.top_candidates</code>를 확인해야 합니다.
+        이상하면 S3 <code>answers.redacted.json</code>의 운영 매칭 결과와
+        <code>llm_trace.redacted.json</code>의 확정 매칭 근거 요약을 함께 확인합니다.
       </div>
 
-      <h3 class="schema-title">8-3. matched_slots 예시</h3>
+      <h3 class="schema-title">8-3. 운영 matched_slots 예시</h3>
       <pre><code>"matched_slots": [
   {
     "slot_id": "cough",
@@ -1220,29 +1215,40 @@ symptom_embeddings_...json
     "source_quote": "기침이 계속 나요",
     "normalized_text": "기침이 있음",
     "status": "있음",
-    "score": 0.9,
     "alert": false,
-    "ir_method": "bm25_titan_hybrid",
-    "ir_trace": {
-      "query": "기침이 계속 나요 기침",
-      "bm25_score": 1.0,
-      "vector_score": 0.46,
-      "vector_norm": 0.72,
-      "label_score": 1.0,
-      "rank_score": 1.07,
-      "retrieval_branch": "preferred_alias",
-      "top_candidates": [
-        {
-          "slot_id": "cough",
-          "display_name": "기침",
-          "bm25_score": 1.0,
-          "vector_score": 0.46,
-          "rank_score": 1.07
-        }
-      ]
-    }
+    "ir_method": "bm25_titan_hybrid"
   }
 ]</code></pre>
+
+      <h3 class="schema-title">8-4. 최소 설명 trace 예시</h3>
+      <pre><code>"llm_trace.redacted.json": {
+  "Q1": {
+    "graph": "munjin_langgraph_answer_pipeline",
+    "active_path": ["input_transcript", "semantic_extraction", "schema_quote_validation", "hybrid_ir_match"],
+    "events": [
+      {
+        "node": "hybrid_ir_match",
+        "status": "matched",
+        "details": {
+          "matched_count": 1,
+          "method": "bm25_titan_hybrid",
+          "accepted_matches": [
+            {
+              "slot_id": "cough",
+              "name": "기침",
+              "source_quote": "기침이 계속 나요",
+              "accept_reason": "vector_plus_lexical_or_label",
+              "bm25_score": 1.0,
+              "vector_score": 0.46,
+              "label_score": 1.0,
+              "rank_score": 1.07
+            }
+          ]
+        }
+      }
+    ]
+  }
+}</code></pre>
     </section>
 
     <section id="schemas" class="section">
@@ -1268,12 +1274,18 @@ symptom_embeddings_...json
   "visit_type": "initial | followup",
   "risk": "none | high",
   "patient": { "...": "마스킹 환자 표시 정보" },
-  "streaming_stt": { "Q1": { "provider": "amazon_transcribe_streaming", "audio_stored": false } },
+  "audio_policy": {
+    "provider": "amazon_transcribe_streaming",
+    "mode": "streaming",
+    "audio_storage": "not_stored",
+    "last_question_id": "Q1"
+  },
   "artifact": {
     "prefix": "sessions/2026-06-08/s_1780.../",
     "answers_key": ".../answers.redacted.json",
     "onepaper_key": ".../onepaper.redacted.json",
-    "guide_key": ".../patient_guide.redacted.json"
+    "guide_key": ".../patient_guide.redacted.json",
+    "trace_key": ".../llm_trace.redacted.json"
   },
   "question_status": { "Q1": { "answered": true, "matched_count": 2 } },
   "onepager_ready": true,
@@ -1327,24 +1339,7 @@ symptom_embeddings_...json
       "questions": [],
       "unresolved_items": []
     },
-    "method": "bedrock_nova",
-    "llm_meta": {
-      "model_id": "apac.amazon.nova-pro-v1:0",
-      "langchain": {
-        "chain": "langchain_core_prompt_bedrock_json",
-        "prompt_adapter": "ChatPromptTemplate",
-        "bedrock_runnable": "RunnableLambda",
-        "output_parser": "langchain_json_output_parser"
-      },
-      "rag_context": {
-        "retriever": "local_reference_rag",
-        "source_files": ["diseases_cleaned.json", "symptom_index.json", "clinical_terms.IR_TEXT_ALIASES"],
-        "alias_hints": [],
-        "symptom_references": []
-      },
-      "validation_errors": [],
-      "retry_loop": "langgraph_schema_quote_repair"
-    },
+    "extract_method": "bedrock_nova",
     "confirmed": true
   }
 }</code></pre>
@@ -1356,7 +1351,8 @@ symptom_embeddings_...json
             <li>LLM이 없는 말을 만들면 quote repair/validation에서 버려집니다.</li>
             <li>LLM extraction JSON에는 <code>score</code>, <code>confidence</code>, <code>probability</code> 같은 임의 수치를 저장하지 않습니다.</li>
             <li>LLM이 임의 수치 필드를 넣으면 <code>extra_forbidden</code> 오류로 retry loop에 들어갑니다.</li>
-            <li>원페이퍼 증상 점수는 LLM 값이 아니라 BM25, Titan vector, 표준명 유사도로 계산한 IR 매칭 점수입니다.</li>
+            <li>운영 artifact와 의료진 UI에는 숫자 매칭 점수를 저장하거나 표시하지 않습니다.</li>
+            <li>BM25, Titan vector, 표준명 유사도는 확정 매칭의 최소 설명 trace에만 요약됩니다.</li>
       <li><code>standardized_text</code>는 Q1뿐 아니라 Q2~Q4에도 생성됩니다.</li>
       <li>DynamoDB에는 이 문항 원문과 spans가 직접 저장되지 않고 S3 artifact key만 남습니다.</li>
           </ul>
@@ -1538,13 +1534,13 @@ EMBEDDING_DIMENSIONS=512</code></pre>
           </tr>
           <tr>
             <td>원문 quote가 이상함</td>
-            <td>S3 <code>answers.redacted.json</code></td>
-            <td><code>source_quote</code>, <code>original_quote</code>, <code>llm_meta.validation_errors</code></td>
+            <td>S3 <code>answers.redacted.json</code>, <code>llm_trace.redacted.json</code></td>
+            <td><code>source_quote</code>, <code>original_quote</code>, validator event의 <code>source_quote_grounding</code></td>
           </tr>
           <tr>
-            <td>증상명/점수가 이상함</td>
-            <td><code>matched_slots.ir_trace</code></td>
-            <td><code>bm25_score</code>, <code>vector_score</code>, <code>label_score</code>, <code>top_candidates</code></td>
+            <td>증상명이 이상함</td>
+            <td>S3 <code>answers.redacted.json</code>, <code>llm_trace.redacted.json</code></td>
+            <td>운영 <code>matched_slots</code>와 trace의 <code>accepted_matches</code> 근거 요약</td>
           </tr>
           <tr>
             <td>환자 질문이 합쳐짐</td>

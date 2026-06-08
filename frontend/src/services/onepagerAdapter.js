@@ -97,7 +97,6 @@ function normalizeSymptomSlots(slots) {
     normalizedText: slot.normalized_text || '',
     status: slot.status || '',
     explain: slot.explain || '',
-    score: Number(slot.score ?? 0),
     alert: Boolean(slot.alert),
   }))
 }

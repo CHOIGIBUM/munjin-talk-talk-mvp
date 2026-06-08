@@ -12,6 +12,7 @@ import json
 from typing import Any
 
 from artifact_store import DOCTOR_REVIEW_FILE, GUIDE_FILE, ONEPAPER_FILE, get_json, put_json
+from artifact_policy import prepare_artifact_payload
 from llm import call_bedrock_json_with_meta
 from schemas.guide import validate_guide_payload
 from sessions import get_session, update_session
@@ -44,12 +45,11 @@ def save_doctor_response(body: dict[str, Any]):
         "additional_notes": patient_instruction,
         "reviewed_at": now_iso(),
     }
-    doctor_review_key = put_json(session, DOCTOR_REVIEW_FILE, doctor_review)
-    guide_key = put_json(session, GUIDE_FILE, guide)
+    put_json(session, DOCTOR_REVIEW_FILE, doctor_review)
+    put_json(session, GUIDE_FILE, guide)
+    response_guide = prepare_artifact_payload(GUIDE_FILE, guide)
 
     update_session(session_id, {
-        "doctor_review_key": doctor_review_key,
-        "guide_key": guide_key,
         "guide_ready": bool(guide.get("items") or patient_instruction),
         "reviewed_at": doctor_review["reviewed_at"],
         "status": "reviewed",
@@ -58,7 +58,7 @@ def save_doctor_response(body: dict[str, Any]):
         "doctor_review_saved": True,
         "patient_guide_generated": bool(guide.get("items")),
         "validator_passed": validator_passed,
-        "patient_guide": guide,
+        "patient_guide": response_guide,
     }, None
 
 

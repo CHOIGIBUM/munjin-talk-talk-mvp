@@ -276,7 +276,7 @@ backend/serverless/src/
 | `pipeline_graph.py` | LangGraph 조립, 노드 연결, 조건 분기 |
 | `pipeline_nodes.py` | 실제 노드 구현 |
 | `pipeline_state.py` | 상태 타입과 그래프 메타데이터 |
-| `pipeline_trace.py` | trace와 orchestration snapshot 저장 |
+| `pipeline_trace.py` | LangGraph active path와 최소 trace helper |
 | `rag_context.py` | extraction 앞단에서 원천 JSON/alias 기반 RAG 참고 문맥 검색 |
 
 이렇게 나눈 이유:
@@ -284,7 +284,7 @@ backend/serverless/src/
 - `pipeline_graph.py`를 읽으면 전체 흐름만 보이게 하기 위해
 - `pipeline_nodes.py`를 읽으면 각 단계의 처리만 보이게 하기 위해
 - `pipeline_state.py`에서 저장되는 상태 shape을 한눈에 보기 위해
-- `pipeline_trace.py`에서 설명 가능성 관련 로직을 분리하기 위해
+- `pipeline_trace.py`에서 설명 가능성 관련 최소 trace 로직을 분리하기 위해
 
 ### Extraction과 검증
 

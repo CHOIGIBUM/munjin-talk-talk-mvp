@@ -10,11 +10,12 @@
 
 1. 음성 원본 파일은 저장하지 않습니다.
 2. DynamoDB에는 세션 상태와 S3 artifact pointer만 저장합니다.
-3. 문진 답변, LLM 결과, IR trace, 원페이퍼, 의사 답변, 환자 안내문은 S3 artifact bucket에 가명처리 JSON으로 저장합니다.
-4. LLM 출력은 Pydantic schema와 source_quote 검증을 통과해야 저장됩니다.
-5. 증상 매칭은 LLM 단독 판단이 아니라 BM25 + Titan Vector Hybrid IR을 통과해야 합니다.
-6. rule-based extraction fallback으로 LLM 실패를 조용히 대체하지 않습니다.
-7. 의료진 UI에는 내부 rank score를 숫자로 노출하지 않습니다.
+3. 문진 답변, 원페이퍼, 의사 답변, 환자 안내문은 운영용 S3 artifact로 저장합니다.
+4. LLM/LangGraph/IR 추적은 `llm_trace.redacted.json` 하나에 최소 설명 단위만 저장합니다.
+5. LLM 출력은 Pydantic schema와 source_quote 검증을 통과해야 저장됩니다.
+6. 증상 매칭은 LLM 단독 판단이 아니라 BM25 + Titan Vector Hybrid IR을 통과해야 합니다.
+7. rule-based extraction fallback으로 LLM 실패를 조용히 대체하지 않습니다.
+8. 의료진 UI와 운영 artifact에는 내부 rank score를 숫자로 노출하지 않습니다.
 
 ---
 
@@ -65,7 +66,6 @@ sessions/YYYY-MM-DD/{session_id}/
   doctor_review.redacted.json
   patient_guide.redacted.json
   llm_trace.redacted.json
-  validation_trace.redacted.json
 ```
 
 운영 설정 권장:
@@ -136,6 +136,7 @@ backend/serverless/
 | `settings.py` | AWS client, 환경 변수, 모델 설정 |
 | `sessions.py` | DynamoDB 세션 생성, 조회, 상태 갱신 |
 | `artifact_store.py` | S3 artifact 저장과 조회 |
+| `artifact_policy.py` | 운영 artifact와 최소 trace 저장 필드 정리 |
 | `privacy.py` | 저장 전 가명처리와 요약 helper |
 | `audio.py` | Transcribe Streaming presigned URL 발급 |
 | `orchestration.py` | `/process-answer` 전체 처리 진입점 |
@@ -203,7 +204,7 @@ schema_quote_validation
 중요한 저장 규칙:
 
 - `session_validation_save`는 DynamoDB에 환자 답변 전체를 저장하지 않습니다.
-- 검증된 답변과 trace는 S3 `answers.redacted.json`, `llm_trace.redacted.json`에 저장합니다.
+- 검증된 답변은 S3 `answers.redacted.json`에 저장하고, graph/validator/IR 설명은 S3 `llm_trace.redacted.json`에 최소 단위로 저장합니다.
 - DynamoDB에는 `question_status`, `risk`, `status`, S3 key만 갱신합니다.
 
 ---

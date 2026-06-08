@@ -58,11 +58,11 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 직원 접수 세션 생성 | `backend/serverless/src/sessions.py` `create_session` | 환자명, full_name, 생년월일, 나이, 성별, 접수번호, 진료과, 담당의, 연락처, 초진/재진 | DynamoDB | 개인정보 | full_name, birth_date, phone이 DynamoDB에 직접 저장됨 | DynamoDB 최소값 + 필요 시 S3 가명 산출물 | full_name, birth_date, phone 원문 저장 제거. 환자 표시명, 연령대, 성별, 접수용 무작위 ID만 유지 |
 | 환자 동의 기록 | `backend/serverless/src/sessions.py` `save_patient_consent` | 동의 여부, 동의 버전, 동의 항목, 민감정보 동의 항목, 동의 시각 | DynamoDB | 개인정보 처리 기록 | 상세 동의 문구와 항목이 세션 레코드에 그대로 누적됨 | DynamoDB 요약 + S3 `consent.json` | DynamoDB에는 accepted, version, accepted_at만 유지. 상세 내용은 S3에 보관 |
-| 음성 인식 준비 | `backend/serverless/src/audio.py` | Transcribe Streaming URL, streaming_stt 메타데이터 | DynamoDB | 낮음 | 현재 스트리밍 메타데이터는 큰 문제는 적음 | DynamoDB | audio_stored=false, provider, status 정도만 유지 |
+| 음성 인식 준비 | `backend/serverless/src/audio.py` | Transcribe Streaming URL, audio_policy 요약 | DynamoDB | 낮음 | 문항별 STT 세부 상태를 누적하면 불필요한 상태가 늘어남 | DynamoDB | provider, mode, audio_storage=not_stored, last_question_id만 유지 |
 | 음성 원본 | 현재 스트리밍 구조에서는 저장하지 않음 | 환자 음성 파일 | 저장하지 않음 | 고위험 건강정보 | S3 업로드 방식으로 되돌아가면 위험 | 저장 금지 | 실시간 스트리밍 유지. 음성 파일 S3 저장 금지 |
 | STT 결과 텍스트 | `frontend/src/hooks/useSpeechCapture.js`, `backend/serverless/src/onepager.py` | 환자 발화 원문 텍스트 | DynamoDB `responses.Qx.text` | 건강정보 | 문진 원문이 DynamoDB에 누적됨 | 메모리 처리 후 S3 `answers.redacted.json` | 저장 전 가명처리. DynamoDB에는 완료 여부와 S3 key만 저장 |
-| Q별 의미 추출 | `backend/serverless/src/onepager.py`, `pipeline_graph.py`, `pipeline_nodes.py` | spans, source_quote, normalized_text, structured, clinical_clues, patient_questions | DynamoDB `question_results` | 건강정보 | LLM 추출 산출물이 DynamoDB에 직접 저장됨 | S3 `answers.redacted.json`, `trace.redacted.json` | 원문 quote는 S3로 이동. DynamoDB에는 question_status만 유지 |
-| 증상 IR 매칭 | `backend/serverless/src/retrieval.py` | matched_slots, symptom label, alias, rank_score, 근거 문구 | DynamoDB `onepager.symptom_slots` | 건강정보 | 매칭 근거와 quote가 DynamoDB에 저장됨 | S3 `onepaper.redacted.json`, `trace.redacted.json` | 화면 표시에 필요한 경우 API가 S3에서 읽어 반환. DDB에는 onepaper_ready만 저장 |
+| Q별 의미 추출 | `backend/serverless/src/onepager.py`, `pipeline_graph.py`, `pipeline_nodes.py` | spans, source_quote, normalized_text, structured, clinical_clues, patient_questions | DynamoDB `question_results` | 건강정보 | LLM 추출 산출물이 DynamoDB에 직접 저장됨 | S3 `answers.redacted.json`, `llm_trace.redacted.json` | 운영 답변은 S3로 이동. trace는 최소 node event만 유지 |
+| 증상 IR 매칭 | `backend/serverless/src/retrieval.py` | matched_slots, symptom label, alias, rank_score, 근거 문구 | DynamoDB `onepager.symptom_slots` | 건강정보 | 매칭 근거와 quote가 DynamoDB에 저장됨 | S3 `onepaper.redacted.json`, `llm_trace.redacted.json` | 운영 onepaper에는 점수 제거. 확정 IR 근거 요약은 최소 trace에만 저장 |
 | Safety Flag | `backend/serverless/src/clinical_terms.py`, `onepager.py`, `pipeline_nodes.py` | 객혈, 피 표현 등 위험 플래그, risk | DynamoDB | 건강정보 요약 | 상세 원문이 함께 묶일 수 있음 | DynamoDB 요약 + S3 상세 | DynamoDB에는 risk level, flag code만 유지. 상세 근거는 S3 |
 | 원페이퍼 생성 | `backend/serverless/src/onepager.py` `build_onepager` | 환자 요약, 증상 목록, 문진 맥락, 체크리스트, EMR 문장 | DynamoDB `onepager` | 건강정보 | 원페이퍼 전체가 DynamoDB에 저장됨 | S3 `onepaper.redacted.json` | DynamoDB에는 s3 key, ready status, risk 요약만 저장 |
 | 의사 답변 저장 | `backend/serverless/src/guide.py` `save_doctor_response` | 의사 답변, 환자 안내 강조사항, 추가 메모 | DynamoDB `doctor_review` | 건강정보 | 의사 입력 전문이 DynamoDB에 저장됨 | S3 `doctor_review.redacted.json` | DynamoDB에는 reviewed_at, guide_ready만 유지 |
@@ -104,15 +104,15 @@
 | `clinical_clues` | DynamoDB | 문진 맥락 | 건강정보 | S3 이동 |
 | `patient_questions` | DynamoDB | 환자 질문 | 건강정보 | S3 이동 |
 | `matched_slots` | DynamoDB | 증상 매칭 결과 | 건강정보 | S3 이동. DDB에는 count/status만 유지 |
-| `rank_score` | DynamoDB 또는 응답 | IR 내부 계산값 | 낮음 | 내부 trace에만 저장. UI에는 숫자 대신 "매칭됨" 표시 유지 |
+| `rank_score` | DynamoDB 또는 응답 | IR 내부 계산값 | 낮음 | 운영 artifact와 UI 응답에서 제거. 확정 매칭의 감사용 요약에만 제한 저장 |
 | `onepager` | DynamoDB | 의사용 원페이퍼 | 건강정보 | S3 `onepaper.redacted.json` 이동 |
 | `review_items` | DynamoDB | 의료진 확인 항목 | 건강정보 | S3 이동 |
 | `transfer_text` | DynamoDB | EMR 초안 | 건강정보 | S3 이동 |
 | `doctor_review.answers` | DynamoDB | 의사 답변 | 건강정보 | S3 `doctor_review.redacted.json` 이동 |
 | `doctor_review.patient_instruction` | DynamoDB | 환자 강조사항 | 건강정보 | S3 이동 |
 | `patient_guide` | DynamoDB | 환자 안내문 | 건강정보 | S3 `patient_guide.redacted.json` 이동 |
-| `pipeline_trace` | DynamoDB | LLM/검증 추적 | 건강정보 가능 | S3 `trace.redacted.json` 이동 |
-| `llm_meta` | DynamoDB | 모델 호출 메타데이터 | 낮음 또는 건강정보 가능 | 원문 없는 메타만 DDB 가능. 상세 trace는 S3 |
+| `pipeline_trace` | DynamoDB | LLM/검증 추적 | 건강정보 가능 | 원문 없는 최소 node event만 S3 `llm_trace.redacted.json`에 저장 |
+| `llm_meta` | DynamoDB | 모델 호출 메타데이터 | 낮음 또는 건강정보 가능 | 운영 artifact에서 제거. 모델 ID, parser, raw hash 등 최소값만 trace에 저장 |
 | `risk` | DynamoDB | 위험도 요약 | 건강정보 요약 | DynamoDB 유지 가능 |
 | `safety_flag` | DynamoDB | 위험 플래그 상세 | 건강정보 | DDB에는 flag code만, 상세 근거는 S3 |
 
@@ -126,7 +126,6 @@ sessions/YYYY-MM-DD/{session_id}/
   doctor_review.redacted.json
   patient_guide.redacted.json
   llm_trace.redacted.json
-  validation_trace.redacted.json
 ```
 
 각 파일은 다음 원칙을 지킵니다.
@@ -164,8 +163,10 @@ sessions/YYYY-MM-DD/{session_id}/
   "artifact": {
     "bucket": "<artifact-bucket-name>",
     "prefix": "sessions/2026-06-08/s_1781000000000_ab12cd/",
+    "answers_key": "sessions/2026-06-08/s_1781000000000_ab12cd/answers.redacted.json",
     "onepaper_key": "sessions/2026-06-08/s_1781000000000_ab12cd/onepaper.redacted.json",
-    "guide_key": "sessions/2026-06-08/s_1781000000000_ab12cd/patient_guide.redacted.json"
+    "guide_key": "sessions/2026-06-08/s_1781000000000_ab12cd/patient_guide.redacted.json",
+    "trace_key": "sessions/2026-06-08/s_1781000000000_ab12cd/llm_trace.redacted.json"
   },
   "created_at": "2026-06-08T10:10:00+09:00",
   "updated_at": "2026-06-08T10:20:30+09:00",
