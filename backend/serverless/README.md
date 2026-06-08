@@ -109,6 +109,7 @@ backend/serverless/
     ├── pipeline_nodes.py
     ├── pipeline_state.py
     ├── pipeline_trace.py
+    ├── rag_context.py
     ├── extraction.py
     ├── extraction_prompts.py
     ├── extraction_schema.py
@@ -144,7 +145,8 @@ backend/serverless/
 | `pipeline_nodes.py` | 각 pipeline node의 실제 처리 |
 | `pipeline_state.py` | LangGraph state 구조 |
 | `pipeline_trace.py` | active path와 trace 저장 |
-| `extraction.py` | Bedrock 기반 의미 추출 |
+| `rag_context.py` | 원천 JSON과 제한 alias bridge 기반 RAG 참고 문맥 검색 |
+| `extraction.py` | `/extract` 단독 테스트용 Bedrock 의미 추출 호환 경로 |
 | `extraction_prompts.py` | Q별 영어 prompt |
 | `langchain_prompting.py` | LangChain PromptTemplate, Bedrock Runnable, JSON parser chain |
 | `llm.py` | LLM JSON 호출 호환 wrapper와 chain meta 반환 |
@@ -186,8 +188,10 @@ backend/serverless/
 POST /process-answer
   -> input_transcript
   -> quick_safety_flag
+  -> rag_context_retrieval
   -> semantic_extraction
   -> schema_quote_validation
+  -> 검증 실패 시 semantic_extraction으로 retry
   -> hybrid_ir_match
   -> session_validation_save
   -> onepaper_refresh
@@ -197,7 +201,7 @@ POST /process-answer
 Safety flag가 먼저 감지되면 일부 경로는 다음처럼 분기할 수 있습니다.
 
 ```text
-quick_safety_flag
+schema_quote_validation
   -> safety_guardrail_save
   -> response_payload
 ```

@@ -12,6 +12,7 @@
 | --- | --- |
 | 세션 관리 | 접수처에서 생성한 문진 세션의 최소 상태와 S3 pointer를 DynamoDB에 저장하고 조회 |
 | 음성 인식 연결 | 환자 음성 저장 없이 Transcribe Streaming presigned URL 발급 |
+| RAG 참고 컨텍스트 | 원천 JSON과 제한 alias bridge에서 LLM 표준화 참고 문맥 검색 |
 | LLM extraction | Bedrock Nova로 환자 발화의 의미 단위, 표준화, 질문, 단서 추출 |
 | Schema validation | Pydantic으로 JSON 구조, enum, quote grounding 검증 |
 | Hybrid IR | LLM 증상 후보를 BM25 + Titan Vector로 표준 증상명에 매칭 |
@@ -44,6 +45,7 @@ backend/
         ├── pipeline_nodes.py
         ├── pipeline_state.py
         ├── pipeline_trace.py
+        ├── rag_context.py
         ├── extraction.py
         ├── extraction_prompts.py
         ├── extraction_schema.py
@@ -74,7 +76,8 @@ POST /process-answer
   -> orchestration.py
   -> pipeline_graph.py
   -> pipeline_nodes.py
-  -> extraction.py
+  -> rag_context.py
+  -> langchain_prompting.py / llm.py
   -> schemas/extraction.py
   -> retrieval.py
   -> onepager.py
@@ -89,13 +92,14 @@ POST /process-answer
 3. `orchestration.py`는 LangGraph 파이프라인을 실행합니다.
 4. `pipeline_graph.py`는 노드 순서와 조건 분기를 정의합니다.
 5. `pipeline_nodes.py`는 각 노드의 실제 처리 함수를 실행합니다.
-6. `semantic_extraction_node`가 `extraction.py`를 호출합니다.
-7. `extraction.py`가 질문 난이도에 따라 Nova Pro 또는 Nova Lite를 선택합니다.
-8. `schemas/extraction.py`가 LLM JSON을 Pydantic으로 검증합니다.
-9. 증상 문항이면 `retrieval.py`가 Hybrid IR 매칭을 수행합니다.
-10. `onepager.py`가 문항 artifact를 바탕으로 원페이퍼 JSON을 갱신합니다.
-11. `artifact_store.py`가 답변/원페이퍼/trace를 S3에 저장합니다.
-12. `sessions.py`가 DynamoDB의 상태와 S3 pointer만 갱신합니다.
+6. `rag_context_retrieval_node`가 원천 JSON 기반 참고 문맥을 검색합니다.
+7. `semantic_extraction_node`가 LangChain Runnable chain으로 Bedrock Nova를 호출합니다.
+8. `schema_quote_validation_node`가 `schemas/extraction.py`의 Pydantic schema와 source_quote를 검증합니다.
+9. 검증 실패 시 LangGraph가 `semantic_extraction_node`로 되돌려 repair prompt를 실행합니다.
+10. 증상 문항이면 `retrieval.py`가 Hybrid IR 매칭을 수행합니다.
+11. `onepager.py`가 문항 artifact를 바탕으로 원페이퍼 JSON을 갱신합니다.
+12. `artifact_store.py`가 답변/원페이퍼/trace를 S3에 저장합니다.
+13. `sessions.py`가 DynamoDB의 상태와 S3 pointer만 갱신합니다.
 
 ---
 
@@ -114,6 +118,7 @@ POST /process-answer
 ```text
 input_transcript
 quick_safety_flag
+rag_context_retrieval
 semantic_extraction
 schema_quote_validation
 hybrid_ir_match
@@ -133,7 +138,7 @@ response_payload
 
 ## LangChain 사용 위치
 
-현재 LangChain은 agent framework로 사용하지 않습니다. Bedrock에 전달할 메시지 계층을 구성하는 경량 wrapper로 사용합니다.
+현재 LangChain은 agent framework가 아니라 Runnable chain으로 사용합니다. Bedrock에 전달할 prompt를 `ChatPromptTemplate`로 만들고, boto3 Bedrock 호출을 `RunnableLambda`로 감싼 뒤, `JsonOutputParser`로 JSON을 파싱합니다. 이 Runnable chain은 LangGraph의 `semantic_extraction` 노드 안에서 실행됩니다.
 
 관련 파일:
 
@@ -145,7 +150,8 @@ serverless/src/llm.py
 역할:
 
 - Bedrock `converse` API에 맞는 message 구성
-- prompt 문자열과 LLM 호출부 분리
+- PromptTemplate, Bedrock Runnable, JSON parser를 한 체인으로 연결
+- parser 종류와 raw 응답 hash를 `llm_meta.langchain`에 기록
 - 향후 dialect RAG, retriever, output parser 확장을 위한 연결 지점 제공
 
 ---
@@ -174,6 +180,7 @@ serverless/src/llm.py
 | --- | --- | --- |
 | LLM extraction | 기본 사용 | 실제 문진 의미 추출 |
 | Pydantic validation | 항상 사용 | LLM JSON 저장 전 검증 |
+| RAG context retrieval | 사용 | 원천 JSON과 제한 alias bridge를 검색해 LLM 표준화 참고 문맥으로 제공. 환자 사실로 직접 채택하지 않음 |
 | safety flag rule | 사용 | 객혈, 호흡곤란 등 즉시 직원/의료진 확인이 필요한 표현 감지 |
 | IR document build rule | 사용 | 원천 JSON을 검색 문서로 접는 deterministic 변환. 환자 발화에서 증상을 추출하는 로직은 아님 |
 
@@ -305,7 +312,8 @@ S3 artifact는 `artifact_store.py`를 통해서만 읽고 씁니다. 저장 전 
 | 전체 파이프라인 | `serverless/src/pipeline_graph.py` |
 | 노드별 처리 | `serverless/src/pipeline_nodes.py` |
 | trace 구조 | `serverless/src/pipeline_trace.py` |
-| Bedrock extraction | `serverless/src/extraction.py` |
+| RAG 참고 문맥 | `serverless/src/rag_context.py` |
+| Bedrock extraction 디버그 | `serverless/src/extraction.py` |
 | extraction prompt | `serverless/src/extraction_prompts.py` |
 | extraction schema | `serverless/src/schemas/extraction.py` |
 | Hybrid IR | `serverless/src/retrieval.py` |

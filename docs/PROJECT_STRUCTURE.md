@@ -220,6 +220,7 @@ backend/serverless/src/
 ├── pipeline_nodes.py
 ├── pipeline_state.py
 ├── pipeline_trace.py
+├── rag_context.py
 ├── extraction.py
 ├── extraction_prompts.py
 ├── extraction_schema.py
@@ -279,6 +280,7 @@ backend/serverless/src/
 | `pipeline_nodes.py` | 실제 노드 구현 |
 | `pipeline_state.py` | 상태 타입과 그래프 메타데이터 |
 | `pipeline_trace.py` | trace와 orchestration snapshot 저장 |
+| `rag_context.py` | extraction 앞단에서 원천 JSON/alias 기반 RAG 참고 문맥 검색 |
 
 이렇게 나눈 이유:
 
@@ -291,7 +293,7 @@ backend/serverless/src/
 
 | 파일 | 역할 |
 | --- | --- |
-| `extraction.py` | Bedrock extraction 실행과 retry loop |
+| `extraction.py` | `/extract` 단독 디버그용 Bedrock extraction 호환 경로 |
 | `extraction_schema.py` | runtime 보강, quote grounding, 문항 단위 검증 |
 | `schemas/extraction.py` | Pydantic fixed schema |
 
@@ -345,6 +347,7 @@ backend/serverless/src/data/
 | Lambda 환경 변수 추가 | `template.yaml`, `settings.py` |
 | 질문 문구 수정 | `frontend/src/config/questions.js` |
 | Bedrock prompt 수정 | `extraction_prompts.py`, `onepager_review.py`, `guide.py` |
+| RAG 참고 문맥 수정 | `rag_context.py`, `retrieval_documents.py`, `clinical_terms.py` |
 | LLM JSON schema 수정 | `schemas/extraction.py`, `schemas/review.py`, `schemas/guide.py` |
 | source_quote 검증 수정 | `schemas/extraction.py`, `extraction_schema.py` |
 | LangGraph 노드 추가 | `pipeline_state.py`, `pipeline_nodes.py`, `pipeline_graph.py` |

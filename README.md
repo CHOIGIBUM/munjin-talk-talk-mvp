@@ -21,13 +21,14 @@
 | Pydantic schema validation | 구현 | 타입, enum, 필수 필드, extra field, source_quote 검증 |
 | LangChain | 구현 | PromptTemplate, Bedrock Runnable, JSON parser를 묶은 LLM 호출 chain |
 | LangGraph | 구현 | 문항 처리 노드, 분기, trace를 명시적으로 구성 |
+| RAG 참고 컨텍스트 | 구현 | 원천 JSON과 제한 alias bridge를 LLM extraction 앞단에 약한 참고 문맥으로 제공 |
 | Hybrid IR | 구현 | BM25 + Titan Vector + label bridge 기반 표준 증상 매칭 |
 | 의료진 원페이퍼 | 구현 | 증상, 원문 quote, 문진 맥락, 확인 항목, EMR 초안 표시 |
 | 환자 안내문 | 구현 | 의사 답변과 강조사항 기반 안내문 표시 |
 | DynamoDB/S3 하이브리드 저장 | 구현 | DynamoDB는 상태와 pointer, S3는 가명처리 artifact 저장 |
 | 인증/권한 분리 | MVP 범위 밖 | 공개 테스트 전 별도 설계 필요 |
 | 실제 EMR 연동 | MVP 범위 밖 | 병원 시스템 연동 단계에서 검토 |
-| 강원 방언 RAG | 계획 | 추후 방언 사전과 RAG 구성 예정 |
+| 강원 방언 RAG | 계획 | 추후 국립국어원/방언 사전 기반 retriever로 확장 예정 |
 
 ---
 
@@ -39,8 +40,10 @@
   -> 환자 음성 문진
   -> Transcribe Streaming 전사
   -> 환자 STT 결과 확인
+  -> 원천 JSON 기반 RAG 참고 컨텍스트 검색
   -> Bedrock LLM extraction
   -> Pydantic schema/source_quote 검증
+  -> 검증 실패 시 LangGraph retry loop
   -> Hybrid IR 표준 증상 매칭
   -> S3 artifact 저장, DynamoDB 상태 갱신
   -> 의료진 원페이퍼 확인
@@ -170,9 +173,10 @@ flowchart LR
 | 단계 | 기술 | 역할 | 통제 |
 | --- | --- | --- | --- |
 | 음성 인식 | Amazon Transcribe Streaming | 환자 음성을 한국어 텍스트로 전환 | 음성 원본 파일 저장 없음 |
+| RAG 참고 컨텍스트 | 로컬 reference retriever | 원천 JSON과 제한 alias bridge에서 표준화 참고 문맥 검색 | 환자 사실로 직접 채택하지 않음 |
 | 의미 추출 | Bedrock Nova Pro/Lite | 문항별 발화를 schema에 맞게 구조화 | Pydantic, enum, source_quote 검증 |
 | LLM 호출 chain | LangChain Core | PromptTemplate, Bedrock Runnable, JSON parser 구성 | chain meta와 parser 경로 추적 |
-| 파이프라인 제어 | LangGraph | 노드 순서, 분기, trace 관리 | active_path와 pipeline_trace 저장 |
+| 파이프라인 제어 | LangGraph | 노드 순서, RAG, parser/validator, retry 분기, trace 관리 | active_path와 pipeline_trace 저장 |
 | 증상 매칭 | BM25 + Titan Vector Hybrid IR | LLM 증상 후보를 표준 증상명과 매칭 | threshold와 ir_trace 기록 |
 | 원페이퍼 리뷰 | Bedrock Nova Pro | 의료진 확인 항목과 EMR 초안 보강 | review schema 검증 |
 | 안내문 변환 | Bedrock Nova Lite | 의사 답변을 환자용 안내문으로 변환 | guide schema 검증 |
@@ -183,6 +187,7 @@ flowchart LR
 - `source_quote`는 환자 원문에 실제 존재해야 합니다.
 - 스키마에 없는 JSON 필드는 거부합니다.
 - 증상 매칭은 LLM 단독 판단이 아니라 원천 JSON 기반 Hybrid IR을 통과해야 합니다.
+- RAG 결과는 LLM 표준화 참고 문맥일 뿐, source_quote나 최종 증상 매칭 근거가 아닙니다.
 - rule-based extraction fallback으로 LLM 실패를 조용히 대체하지 않습니다.
 - validator 실패는 retry 후 실패 응답으로 드러냅니다.
 
@@ -255,6 +260,7 @@ munjin-talk-talk-mvp/
 │           ├── privacy.py
 │           ├── pipeline_graph.py
 │           ├── pipeline_nodes.py
+│           ├── rag_context.py
 │           ├── extraction.py
 │           ├── retrieval.py
 │           ├── onepager.py

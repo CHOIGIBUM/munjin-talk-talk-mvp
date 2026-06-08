@@ -1,7 +1,9 @@
-"""Question-level semantic parsing entrypoint.
+"""Question-level semantic parsing compatibility endpoint.
 
-이 파일은 `/extract` 또는 `/process-answer`에서 호출되는 얇은 진입점입니다.
-실제 프롬프트와 schema/source_quote 검증은 전용 파일로 분리했습니다.
+운영 문항 처리는 `/process-answer`의 LangGraph 파이프라인이 담당합니다.
+이 파일은 `/extract` 단독 디버그 endpoint를 유지하기 위한 호환 경로입니다.
+프롬프트, RAG 참고 문맥, schema/source_quote 검증은 운영 파이프라인과 같은
+구성 요소를 재사용하지만, graph trace 저장과 IR/원페이퍼 갱신은 수행하지 않습니다.
 """
 
 import hashlib
@@ -13,6 +15,7 @@ from extraction_prompts import (
 )
 from extraction_schema import normalize_extraction_output
 from llm import call_bedrock_json_with_meta
+from rag_context import retrieve_intake_rag_context
 from settings import (
     EXTRACTION_RETRY_ATTEMPTS,
     MAX_LLM_TOKENS,
@@ -39,6 +42,7 @@ def extract_question_bedrock(body):
         return {"spans": [], "structured": {}, "transcript": "", "method": "bedrock_nova"}
 
     model_id = select_extraction_model(visit_type, question_id, question_type)
+    rag_context = retrieve_intake_rag_context(transcript, question_type=question_type)
     repair_note = ""
     last_normalized = None
     last_raw_text = ""
@@ -46,7 +50,14 @@ def extract_question_bedrock(body):
     attempts = max(1, EXTRACTION_RETRY_ATTEMPTS)
 
     for attempt in range(1, attempts + 1):
-        prompt = build_extraction_prompt(visit_type, question_id, question_type, transcript, repair_note)
+        prompt = build_extraction_prompt(
+            visit_type,
+            question_id,
+            question_type,
+            transcript,
+            repair_note=repair_note,
+            rag_context_note=rag_context.get("prompt_note") or "",
+        )
         obj, raw_text, chain_meta = call_bedrock_json_with_meta(prompt, model_id, MAX_LLM_TOKENS)
         normalized, validation_errors = normalize_extraction_output(obj, transcript, question_id, question_type)
         last_normalized = normalized
@@ -65,12 +76,23 @@ def extract_question_bedrock(body):
             "model_id": model_id,
             "raw_sha256": hashlib.sha256(last_raw_text.encode("utf-8")).hexdigest(),
             "langchain": chain_meta,
+            "rag_context": summarize_rag_context(rag_context),
             "validation_errors": last_errors,
             "attempts": attempt,
-            "retry_loop": "schema_quote_repair",
+            "retry_loop": "standalone_schema_quote_repair",
         },
     })
     return last_normalized
+
+
+def summarize_rag_context(rag_context):
+    """디버그 응답에 긴 prompt 문구 대신 RAG 출처 요약만 남깁니다."""
+    return {
+        "retriever": rag_context.get("retriever"),
+        "source_files": rag_context.get("source_files") or [],
+        "alias_hint_count": len(rag_context.get("alias_hints") or []),
+        "symptom_reference_count": len(rag_context.get("symptom_references") or []),
+    }
 
 
 def extraction_error(transcript, method, message):

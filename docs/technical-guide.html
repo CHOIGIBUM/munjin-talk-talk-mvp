@@ -655,18 +655,26 @@
         </div>
         <div class="flow-step tint-orange">
           <b>5. 서버 파이프라인</b>
-          <span><code>/process-answer</code><br />LLM 추출, IR, 저장을 한 번에 실행</span>
+          <span><code>/process-answer</code><br />LangGraph 문항 처리 시작</span>
         </div>
         <div class="flow-step tint-orange">
-          <b>6. 증상 매칭</b>
+          <b>6. RAG 참고 문맥</b>
+          <span>원천 JSON + 제한 alias<br />LLM 표준화 참고용</span>
+        </div>
+        <div class="flow-step tint-orange">
+          <b>7. LLM + 검증</b>
+          <span>LangChain Runnable<br />Pydantic/source_quote retry</span>
+        </div>
+        <div class="flow-step tint-orange">
+          <b>8. 증상 매칭</b>
           <span>Lambda 내부 graph<br />BM25 + Titan hybrid IR</span>
         </div>
         <div class="flow-step tint-green">
-          <b>7. 저장 검증</b>
+          <b>9. 저장 검증</b>
           <span>Lambda 내부 graph<br />S3 artifact 저장 + DDB 상태 갱신</span>
         </div>
         <div class="flow-step tint-green">
-          <b>8. 원페이퍼</b>
+          <b>10. 원페이퍼</b>
           <span><code>/onepager/{id}</code><br />Nova Pro가 의사 task 생성</span>
         </div>
       </div>
@@ -674,7 +682,8 @@
       <div class="note blue" style="margin-top: 18px;">
         LangChain/LangGraph 적용 방향: LangGraph는 실제 <code>StateGraph</code>로 문항 처리 노드를 연결합니다.
         LangChain은 <code>ChatPromptTemplate -> Bedrock RunnableLambda -> JsonOutputParser</code> 체인으로
-        Nova 호출을 감싸며, Pydantic과 source_quote 검증은 그 다음 단계에서 최종 통과 여부를 결정합니다.
+        Nova 호출을 감싸며, RAG 참고 문맥 검색과 Pydantic/source_quote validator는 각각 별도 graph node로 trace됩니다.
+        검증 실패 시 graph가 <code>schema_quote_validation -> semantic_extraction</code> retry edge를 탑니다.
       </div>
 
       <div class="grid-2" style="margin-top: 18px;">
@@ -734,7 +743,8 @@
 │     ├─ settings.py      # AWS/env 설정
 │     ├─ sessions.py      # DynamoDB session CRUD
 │     ├─ audio.py         # Transcribe Streaming URL, legacy upload 차단
-│     ├─ extraction.py    # Nova 문항 의미 분해 진입점
+│     ├─ rag_context.py   # 원천 JSON 기반 RAG 참고 문맥
+│     ├─ extraction.py    # /extract 단독 테스트 호환 경로
 │     ├─ extraction_prompts.py
 │     ├─ extraction_schema.py # Pydantic 검증 adapter
 │     ├─ schemas/
@@ -742,6 +752,10 @@
 │     │  ├─ review.py         # 원페이퍼 review schema
 │     │  └─ guide.py          # 환자 안내문 schema
 │     ├─ orchestration.py # 문항 처리 graph controller
+│     ├─ pipeline_graph.py
+│     ├─ pipeline_nodes.py
+│     ├─ pipeline_state.py
+│     ├─ pipeline_trace.py
 │     ├─ retrieval.py     # BM25 + Titan 증상 IR 진입점
 │     ├─ retrieval_documents.py
 │     ├─ retrieval_embeddings.py
@@ -1055,6 +1069,18 @@
             <td>S3 <code>answers.redacted.json</code></td>
           </tr>
           <tr>
+            <td>RAG 참고 문맥</td>
+            <td>Local reference retriever</td>
+            <td>원천 JSON과 제한 alias bridge에서 표준화 참고 문맥 검색. 환자 사실로 직접 채택하지 않음</td>
+            <td><code>llm_meta.rag_context</code>, <code>pipeline_trace</code></td>
+          </tr>
+          <tr>
+            <td>LLM 호출 체인</td>
+            <td>LangChain Core Runnable</td>
+            <td><code>ChatPromptTemplate -> Bedrock RunnableLambda -> JsonOutputParser</code>로 Nova 호출과 parser를 trace</td>
+            <td><code>llm_meta.langchain</code></td>
+          </tr>
+          <tr>
             <td>Q1 의미 분해</td>
             <td>Bedrock Nova Pro</td>
             <td>주 증상 또는 재진 경과를 증상 span, 맥락, 표준 문장으로 구조화</td>
@@ -1065,6 +1091,12 @@
             <td>Bedrock Nova Lite</td>
             <td>발병 시점, 복약, 환자 질문을 표준화하고 구조화</td>
             <td><code>clinical_clues</code>, <code>structured.questions</code></td>
+          </tr>
+          <tr>
+            <td>스키마/quote 검증</td>
+            <td>Pydantic validator</td>
+            <td>필드, enum, extra field, 원문 substring을 검증하고 실패 시 LangGraph retry edge 실행</td>
+            <td><code>validator_passed</code>, <code>validation_errors</code></td>
           </tr>
           <tr>
             <td>증상 IR</td>
@@ -1324,7 +1356,14 @@ symptom_embeddings_...json
         "bedrock_runnable": "RunnableLambda",
         "output_parser": "langchain_json_output_parser"
       },
-      "validation_errors": []
+      "rag_context": {
+        "retriever": "local_reference_rag",
+        "source_files": ["diseases_cleaned.json", "symptom_index.json", "clinical_terms.IR_TEXT_ALIASES"],
+        "alias_hints": [],
+        "symptom_references": []
+      },
+      "validation_errors": [],
+      "retry_loop": "langgraph_schema_quote_repair"
     },
     "confirmed": true
   }

@@ -8,12 +8,14 @@ trace helper는 `pipeline_trace.py`에 분리되어 있습니다. 이 파일은
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+from langchain_core.runnables import RunnableLambda
 
 from pipeline_nodes import (
     hybrid_ir_match_node,
     input_transcript_node,
     onepaper_refresh_node,
     quick_safety_flag_node,
+    rag_context_retrieval_node,
     response_payload_node,
     safety_guardrail_save_node,
     schema_quote_validation_node,
@@ -38,6 +40,8 @@ def route_after_required_input(state: AnswerPipelineState) -> str:
 
 def route_after_schema_validation(state: AnswerPipelineState) -> str:
     """LLM 검증 결과에 따라 IR 진행, 안전 저장, 오류 종료 중 하나를 선택합니다."""
+    if state.get("retry_extraction"):
+        return "retry"
     if state.get("error_response"):
         return "stop"
     if state.get("safety_only"):
@@ -54,15 +58,16 @@ def _compiled_graph():
     """Lambda warm invocation에서 재사용할 수 있도록 graph를 한 번만 compile합니다."""
     if not hasattr(_compiled_graph, "_graph"):
         workflow = StateGraph(AnswerPipelineState)
-        workflow.add_node("input_transcript", input_transcript_node)
-        workflow.add_node("quick_safety_flag", quick_safety_flag_node)
-        workflow.add_node("semantic_extraction", semantic_extraction_node)
-        workflow.add_node("schema_quote_validation", schema_quote_validation_node)
-        workflow.add_node("hybrid_ir_match", hybrid_ir_match_node)
-        workflow.add_node("session_validation_save", session_validation_save_node)
-        workflow.add_node("safety_guardrail_save", safety_guardrail_save_node)
-        workflow.add_node("onepaper_refresh", onepaper_refresh_node)
-        workflow.add_node("response_payload", response_payload_node)
+        workflow.add_node("input_transcript", RunnableLambda(input_transcript_node))
+        workflow.add_node("quick_safety_flag", RunnableLambda(quick_safety_flag_node))
+        workflow.add_node("rag_context_retrieval", RunnableLambda(rag_context_retrieval_node))
+        workflow.add_node("semantic_extraction", RunnableLambda(semantic_extraction_node))
+        workflow.add_node("schema_quote_validation", RunnableLambda(schema_quote_validation_node))
+        workflow.add_node("hybrid_ir_match", RunnableLambda(hybrid_ir_match_node))
+        workflow.add_node("session_validation_save", RunnableLambda(session_validation_save_node))
+        workflow.add_node("safety_guardrail_save", RunnableLambda(safety_guardrail_save_node))
+        workflow.add_node("onepaper_refresh", RunnableLambda(onepaper_refresh_node))
+        workflow.add_node("response_payload", RunnableLambda(response_payload_node))
 
         workflow.add_edge(START, "input_transcript")
         workflow.add_conditional_edges(
@@ -70,12 +75,18 @@ def _compiled_graph():
             route_after_required_input,
             {"continue": "quick_safety_flag", "stop": END},
         )
-        workflow.add_edge("quick_safety_flag", "semantic_extraction")
+        workflow.add_edge("quick_safety_flag", "rag_context_retrieval")
+        workflow.add_edge("rag_context_retrieval", "semantic_extraction")
         workflow.add_edge("semantic_extraction", "schema_quote_validation")
         workflow.add_conditional_edges(
             "schema_quote_validation",
             route_after_schema_validation,
-            {"continue": "hybrid_ir_match", "safety": "safety_guardrail_save", "stop": END},
+            {
+                "retry": "semantic_extraction",
+                "continue": "hybrid_ir_match",
+                "safety": "safety_guardrail_save",
+                "stop": END,
+            },
         )
         workflow.add_edge("hybrid_ir_match", "session_validation_save")
         workflow.add_conditional_edges(

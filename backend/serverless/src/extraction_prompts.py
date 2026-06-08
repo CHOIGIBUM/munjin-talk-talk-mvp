@@ -1,8 +1,8 @@
 """Bedrock extraction prompt templates.
 
 문항별 LLM 추출에서 가장 자주 바뀔 수 있는 부분은 프롬프트입니다.
-그래서 extraction.py 본문에서 분리해, 프롬프트 엔지니어링을 할 때 이 파일만
-집중해서 볼 수 있게 했습니다.
+그래서 LLM 호출 노드와 단독 디버그 endpoint에서 분리해, 프롬프트 엔지니어링을
+할 때 이 파일만 집중해서 볼 수 있게 했습니다.
 """
 
 from settings import LIGHT_MODEL_ID, STRONG_MODEL_ID
@@ -16,7 +16,7 @@ def select_extraction_model(visit_type, question_id, question_type):
     return LIGHT_MODEL_ID
 
 
-def build_extraction_prompt(visit_type, question_id, question_type, transcript, repair_note=""):
+def build_extraction_prompt(visit_type, question_id, question_type, transcript, repair_note="", rag_context_note=""):
     """Nova가 반드시 지켜야 할 quote grounding과 fixed schema를 명시합니다."""
     visit = visit_label(visit_type)
     question_text = {
@@ -63,6 +63,8 @@ Question type: {question_type}
 Question asked: {question_text}
 Patient answer:
 {transcript}
+
+{rag_context_note}
 
 {repair_note}
 
