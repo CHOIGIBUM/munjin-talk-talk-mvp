@@ -16,7 +16,7 @@ import PrivacyConsentModal, {
 import { QUESTIONS } from '../../config/questions.js'
 import { questionTextForBackend } from '../../config/questionText.js'
 import { detectSafetyKeyword } from '../../config/safetyKeywords.js'
-import { processTranscript, recordPatientConsent } from '../../services/api.js'
+import { getQuestionSet, processTranscript, recordPatientConsent } from '../../services/api.js'
 
 const EMPTY_PATIENT = {
   name: '환자',
@@ -46,6 +46,7 @@ export default function PatientFlow({
   patient = null,
   sessionId = null,
   queueNumber = null,
+  questionSetId = 'default',
   frameVariant = 'preview',
   skipVisitTypeWhenPreset = true,
   onTranscriptConfirmed,
@@ -67,8 +68,10 @@ export default function PatientFlow({
   const [consentRejected, setConsentRejected] = useState(false)
   const [consentSaving, setConsentSaving] = useState(false)
   const [consentError, setConsentError] = useState('')
+  const [questionSet, setQuestionSet] = useState(null)
 
-  const questions = visitType ? QUESTIONS[visitType] : []
+  const questionVisits = questionSet?.visits || QUESTIONS
+  const questions = visitType ? (questionVisits[visitType] || QUESTIONS[visitType] || []) : []
   const currentQuestion = questions[questionIndex]
   const activeSessionId = sessionId || ''
   const displayPatient = patient || EMPTY_PATIENT
@@ -82,6 +85,21 @@ export default function PatientFlow({
     setConsentRejected(false)
     setConsentError('')
   }, [activeSessionId])
+
+  useEffect(() => {
+    let active = true
+    getQuestionSet(questionSetId || 'default')
+      .then((next) => {
+        if (active) setQuestionSet(next)
+      })
+      .catch((error) => {
+        console.warn('question set fallback:', error)
+        if (active) setQuestionSet(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [questionSetId])
 
   const saveConsent = useCallback(async (accepted) => {
     if (!activeSessionId) {
@@ -201,6 +219,7 @@ export default function PatientFlow({
       questionId: currentQuestion.id,
       questionType: currentQuestion.question_type,
       questionText: questionTextForBackend(currentQuestion),
+      questionSetId: questionSetId || 'default',
       visitType,
       transcript: answerText,
     })

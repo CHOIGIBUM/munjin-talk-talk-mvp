@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -14,30 +15,48 @@ from typing import Any
 from utils import load_json_file
 
 
-DEFAULT_DOMAIN_PACK = "domain_pack_respiratory.json"
 DOMAIN_DATA_DIR = Path(__file__).resolve().parent / "data"
+DOMAIN_PACK_DIR = DOMAIN_DATA_DIR / "domain_packs"
+DEFAULT_DOMAIN_PACK = "respiratory"
+REQUIRED_DOMAIN_KEYS = {
+    "symptom_rules",
+    "symptom_quote_patterns",
+    "ir_stable_slot_ids",
+    "ir_slot_to_canonical_name",
+    "ir_text_aliases",
+    "ir_red_flag_names",
+    "safety_flags",
+    "excluded_ir_symptom_names",
+    "alert_slot_ids",
+    "reviewer_domain_rules",
+}
 
 
-@lru_cache(maxsize=1)
-def get_domain_pack() -> dict[str, Any]:
+def selected_domain_pack_id() -> str:
+    """환경 변수에서 현재 사용할 도메인팩 id를 읽습니다."""
+    return os.environ.get("DOMAIN_PACK", DEFAULT_DOMAIN_PACK) or DEFAULT_DOMAIN_PACK
+
+
+def _domain_pack_path(pack_id: str) -> Path:
+    """도메인팩 id를 실제 JSON 파일 경로로 변환합니다."""
+    safe_id = str(pack_id or DEFAULT_DOMAIN_PACK).strip()
+    if not safe_id or "/" in safe_id or "\\" in safe_id or ".." in safe_id:
+        raise RuntimeError(f"Invalid domain pack id: {pack_id}")
+    filename = safe_id if safe_id.endswith(".json") else f"{safe_id}.json"
+    return DOMAIN_PACK_DIR / filename
+
+
+@lru_cache(maxsize=None)
+def get_domain_pack(pack_id: str | None = None) -> dict[str, Any]:
     """현재 배포에서 사용할 도메인팩 JSON을 읽어 캐시합니다."""
-    path = DOMAIN_DATA_DIR / DEFAULT_DOMAIN_PACK
+    path = _domain_pack_path(pack_id or selected_domain_pack_id())
     pack = load_json_file(path)
     if not isinstance(pack, dict):
         raise RuntimeError(f"Invalid domain pack: {path}")
+    missing = sorted(REQUIRED_DOMAIN_KEYS - set(pack.keys()))
+    if missing:
+        raise RuntimeError(f"Domain pack {path.name} missing required keys: {', '.join(missing)}")
     return pack
-
-
-def question_text_for(visit_type: str, question_id: str) -> str:
-    """백엔드 fallback용 기본 질문 문구를 반환합니다.
-
-    프론트엔드가 `question_text`를 보내면 그 값을 우선 사용합니다. 이 함수는
-    오래된 프론트나 직원 직접 입력 경로처럼 질문 문구가 누락된 요청을 위한
-    안전한 fallback입니다.
-    """
-    questions = get_domain_pack().get("questions") or {}
-    visit_questions = questions.get(str(visit_type or "")) or {}
-    return str(visit_questions.get(str(question_id or "")) or "")
 
 
 def llm_symptom_slot_ids() -> list[str]:
@@ -76,3 +95,9 @@ def excluded_ir_symptom_names() -> set[str]:
 def alert_slot_ids() -> tuple[str, ...]:
     """문진 중 즉시 확인 대상으로 볼 위험 증상 slot id입니다."""
     return tuple(str(item) for item in get_domain_pack().get("alert_slot_ids", []))
+
+
+def reviewer_domain_rules() -> dict[str, str]:
+    """원페이퍼 review prompt에 주입할 도메인별 금지/우선 규칙입니다."""
+    rules = get_domain_pack().get("reviewer_domain_rules") or {}
+    return {str(key): str(value) for key, value in rules.items()}

@@ -1,26 +1,17 @@
 {
   "version": "respiratory-v1",
   "description": "문진톡톡 MVP에서 사용하는 호흡기계 문진 도메인 설정입니다. 환자 발화 추출은 LLM이 수행하고, 이 파일은 허용 slot, alias hint, 안전 플래그, 기본 질문 문구를 정의합니다.",
-  "questions": {
-    "initial": {
-      "Q1": "어디가 불편하셔서 오셨어요?",
-      "Q2": "그 증상은 언제부터 그러셨어요?",
-      "Q3": "지금 드시는 약이 있으세요?",
-      "Q4": "의사선생님께 묻고 싶은 점이 있으세요?"
-    },
-    "followup": {
-      "Q1": "지난번 진료 이후 어떻게 지내셨어요?",
-      "Q2": "처방받은 약은 잘 드시고 계세요?",
-      "Q3": "그동안 새로 생긴 증상은 없으세요?",
-      "Q4": "지난번에 못 여쭤본 점이 있으신가요?"
-    }
-  },
   "excluded_ir_symptom_names": ["사망", "무증상"],
   "alert_slot_ids": [
     "hemoptysis",
     "dyspnea",
     "chest_pain"
   ],
+  "reviewer_domain_rules": {
+    "rule5": "5. Do NOT add fever/temperature tasks unless fever, heat, chill, high fever, antipyretic use, or body temperature appears in evidence.",
+    "rule6": "6. Do NOT add X-ray, TB, pneumonia, cancer, antibiotics, or lab/test tasks unless safety_flags, patient wording, or clinician agenda explicitly supports them.",
+    "rule11_suffix": "Ordinary sore throat, nasal obstruction, cough, or runny nose must not be marked urgent."
+  },
   "symptom_rules": [
     {"name": "객혈", "slot_id": "hemoptysis", "keywords": ["피", "피가", "객혈", "피섞", "피 섞", "묻어"], "alert": true},
     {"name": "기침", "slot_id": "cough", "keywords": ["기침", "콜록"], "alert": false},

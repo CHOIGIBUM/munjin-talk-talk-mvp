@@ -25,7 +25,7 @@ SpanType = Literal[
     "context",
 ]
 
-# slot_ref 허용 목록은 domain_pack_respiratory.json에서 읽습니다.
+# slot_ref 허용 목록은 data/domain_packs/*.json에서 읽습니다.
 # Literal로 고정하지 않는 이유는 타 진료계 domain pack을 추가할 때 schema 코드를
 # 매번 수정하지 않기 위해서입니다. 실제 허용 여부는 아래 validator가 검사합니다.
 SymptomSlotRef = str

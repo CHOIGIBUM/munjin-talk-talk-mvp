@@ -13,6 +13,7 @@ from audio import generate_streaming_transcribe_url
 from guide import get_guide, save_doctor_response
 from onepager import get_onepager_payload, rerun_onepager_review
 from orchestration import process_answer
+from question_sets import public_question_set
 from sessions import create_session, get_session, list_sessions, public_session, save_patient_consent, update_session
 from utils import parse_body, response
 
@@ -84,6 +85,13 @@ def route(method, path, event):
     if method == "POST" and path == "/process-answer":
         payload, err = process_answer(body)
         return err or response(200, payload)
+
+    match = re.fullmatch(r"/question-sets/([^/]+)", path)
+    if method == "GET" and match:
+        question_set = public_question_set(unquote_plus(match.group(1)))
+        if not question_set:
+            return response(404, {"error": "question_set_not_found"})
+        return response(200, question_set)
 
     if method == "GET" and path == "/doctor/queue":
         return response(200, {"sessions": list_sessions()})

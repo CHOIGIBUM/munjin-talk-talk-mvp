@@ -14,6 +14,7 @@ from typing import Any
 
 from artifact_store import artifact_meta, load_answers, put_json, CONSENT_FILE
 from privacy import consent_summary, sanitize_reception_patient
+from question_sets import selected_question_set_id
 from settings import table
 from utils import ddb_value, mask_name, normalize_visit_type, now_iso
 
@@ -117,6 +118,7 @@ def create_session(body: dict[str, Any]) -> dict[str, Any]:
     """
     patient_input = body.get("patient") or body
     visit_type = normalize_visit_type(body.get("visit_type") or body.get("visitType"))
+    question_set_id = str(body.get("question_set_id") or body.get("questionSetId") or selected_question_set_id())
     session_id = body.get("session_id") or body.get("sessionId") or make_session_id()
     created_at = now_iso()
     patient = sanitize_reception_patient(patient_input)
@@ -131,6 +133,7 @@ def create_session(body: dict[str, Any]) -> dict[str, Any]:
         "expires_at": int(time.time()) + 3 * 24 * 60 * 60,
         "status": "waiting_tablet",
         "visit_type": visit_type,
+        "question_set_id": question_set_id,
         "risk": "none",
         "patient": patient,
         "artifact": artifact_meta(session_id, created_at),
@@ -185,6 +188,8 @@ def public_session(session: dict[str, Any], include_artifacts: bool = False) -> 
         "status": session.get("status", "waiting_tablet"),
         "visitType": session.get("visit_type", "initial"),
         "visit_type": session.get("visit_type", "initial"),
+        "questionSetId": session.get("question_set_id", "default"),
+        "question_set_id": session.get("question_set_id", "default"),
         "risk": session.get("risk", "none"),
         "onepagerReady": bool(session.get("onepager_ready")),
         "guideReady": bool(session.get("guide_ready")),

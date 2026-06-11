@@ -88,6 +88,7 @@ export default function ReceptionView() {
           questionId: question.id,
           questionType: question.question_type,
           questionText: questionTextForBackend(question),
+          questionSetId: manualSession.questionSetId || 'default',
           visitType: manualSession.visitType,
           transcript,
         })

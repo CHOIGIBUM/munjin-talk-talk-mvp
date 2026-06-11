@@ -86,3 +86,18 @@ def test_queue_counter_is_atomic_and_meta_session_is_hidden():
 
     assert visible
     assert all(not item["sessionId"].startswith("__meta") for item in visible)
+
+
+def test_create_session_stores_question_set_id():
+    fake = FakeTable()
+    sessions = import_sessions_with_fake_table(fake)
+
+    created = sessions.create_session({
+        "visit_type": "initial",
+        "question_set_id": "default",
+        "queue_number": 12,
+        "patient": {"name": "김*자", "receipt_id": "R-0002"},
+    })
+
+    assert created["question_set_id"] == "default"
+    assert sessions.public_session(created)["questionSetId"] == "default"

@@ -83,3 +83,15 @@ def test_find_safety_flag_uses_domain_pack_alert_slots():
     assert flag is not None
     assert flag["category"] == "dyspnea"
     assert flag["severity"] == "high"
+
+
+def test_missing_domain_pack_raises_clear_exception():
+    install_settings_stub()
+    from domain_config import get_domain_pack  # noqa: E402
+
+    try:
+        get_domain_pack("not-found-pack")
+    except FileNotFoundError:
+        # load_json_file가 실제 파일 없음 위치를 명확히 알려주면 충분히 실패-명시적입니다.
+        return
+    raise AssertionError("missing domain pack must fail loudly")
