@@ -7,6 +7,7 @@
 
 import re
 import json
+import traceback
 from urllib.parse import unquote_plus
 
 from audio import generate_streaming_transcribe_url
@@ -36,6 +37,7 @@ def handler(event, context):
             "path": path,
             "method": method,
             "exception_type": exc.__class__.__name__,
+            "traceback": traceback.format_exc(),
             "aws_request_id": getattr(context, "aws_request_id", ""),
         }, ensure_ascii=False))
         return response(

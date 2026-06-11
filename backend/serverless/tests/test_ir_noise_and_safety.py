@@ -85,6 +85,68 @@ def test_find_safety_flag_uses_domain_pack_alert_slots():
     assert flag["severity"] == "high"
 
 
+def test_safety_flag_rules_cover_six_domain_categories():
+    install_settings_stub()
+    from clinical_terms import find_safety_flag  # noqa: E402
+
+    cases = [
+        ("가래에 피가 섞여 나와요", "hemoptysis"),
+        ("숨이 너무 차서 말을 못 하겠어요", "dyspnea"),
+        ("가슴이 쥐어짜듯 아파요", "chest_pain"),
+        ("입술이 파래졌어요", "cyanosis"),
+        ("갑자기 기절하고 의식을 잃었어요", "consciousness"),
+        ("열이 39도까지 올라요", "high_fever"),
+    ]
+
+    for text, category in cases:
+        flag = find_safety_flag(text)
+        assert flag is not None
+        assert flag["category"] == category
+
+
+def test_rag_alias_hint_maps_colloquial_nasal_obstruction():
+    install_settings_stub()
+    from rag_context import retrieve_intake_rag_context  # noqa: E402
+
+    context = retrieve_intake_rag_context("코가 맥혀요", top_k=3)
+    hints = context["alias_hints"]
+
+    assert any(item["canonical_hint"] == "코막힘" for item in hints)
+
+
+def test_hybrid_ir_acceptance_gate_matrix():
+    install_settings_stub()
+    from retrieval import is_hybrid_candidate_accepted  # noqa: E402
+
+    accepted_by_bm25, _ = is_hybrid_candidate_accepted({
+        "vector_score": 0.12,
+        "bm25_score": 0.04,
+        "label_score": 0.0,
+    })
+    accepted_by_label, _ = is_hybrid_candidate_accepted({
+        "vector_score": 0.20,
+        "bm25_score": 0.0,
+        "label_score": 0.55,
+    })
+    rejected_no_lexical, reason_no_lexical = is_hybrid_candidate_accepted({
+        "vector_score": 0.20,
+        "bm25_score": 0.0,
+        "label_score": 0.0,
+    })
+    rejected_no_vector, reason_no_vector = is_hybrid_candidate_accepted({
+        "vector_score": 0.01,
+        "bm25_score": 0.80,
+        "label_score": 1.0,
+    })
+
+    assert accepted_by_bm25 is True
+    assert accepted_by_label is True
+    assert rejected_no_lexical is False
+    assert "hybrid_gate_failed" in reason_no_lexical
+    assert rejected_no_vector is False
+    assert "hybrid_gate_failed" in reason_no_vector
+
+
 def test_missing_domain_pack_raises_clear_exception():
     install_settings_stub()
     from domain_config import get_domain_pack  # noqa: E402

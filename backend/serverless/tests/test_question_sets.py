@@ -6,6 +6,7 @@ import importlib
 import json
 import sys
 import types
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -91,3 +92,25 @@ def test_question_set_api_route_returns_public_payload_and_404():
     assert "initial" in ok_body["visits"]
     assert missing["statusCode"] == 404
     assert missing_body["error"] == "question_set_not_found"
+
+
+def test_handler_logs_traceback_without_leaking_exception_to_response(capsys):
+    handler = install_handler_stubs()
+
+    def boom(_method, _path, _event):
+        raise RuntimeError("sensitive backend detail")
+
+    handler.route = boom
+    result = handler.handler(
+        {"requestContext": {"http": {"method": "GET"}}, "rawPath": "/boom"},
+        SimpleNamespace(aws_request_id="req-1"),
+    )
+    body = json.loads(result["body"])
+    log = json.loads(capsys.readouterr().out)
+
+    assert result["statusCode"] == 500
+    assert body["error"] == "internal_error"
+    assert "sensitive backend detail" not in result["body"]
+    assert log["exception_type"] == "RuntimeError"
+    assert "traceback" in log
+    assert "sensitive backend detail" in log["traceback"]
