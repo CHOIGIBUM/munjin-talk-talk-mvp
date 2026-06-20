@@ -44,11 +44,6 @@ export default function RoleLoginModal() {
   const role = request.role
   const label = ROLE_LABEL[role] || '사용자'
 
-  const closeWithError = () => {
-    request.reject(new Error('접근 확인이 취소되었습니다.'))
-    setRequest(null)
-  }
-
   const submit = async (event) => {
     event.preventDefault()
     const value = accessCode.trim()
@@ -75,7 +70,7 @@ export default function RoleLoginModal() {
         <div className="role-login-kicker">문진톡톡</div>
         <h2 id="role-login-title">{ROLE_TITLE[role] || '접속 확인'}</h2>
         <p>
-          {label} 화면은 개인정보와 문진 결과를 다루므로
+          {label} 화면은 개인정보와 문진 결과를 다루는 보호 화면입니다.
           <br />
           접수처에서 안내받은 접근 코드를 입력해 주세요.
         </p>
@@ -96,9 +91,6 @@ export default function RoleLoginModal() {
         {error ? <div className="role-login-error">{error}</div> : null}
 
         <div className="role-login-actions">
-          <button type="button" className="role-login-secondary" onClick={closeWithError} disabled={submitting}>
-            취소
-          </button>
           <button type="submit" className="role-login-primary" disabled={submitting}>
             {submitting ? '확인 중' : '로그인'}
           </button>
