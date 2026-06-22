@@ -65,6 +65,7 @@ export default function DoctorOnePager({
   const symptomSlots = data.symptomSlots || []
   const clinicalClues = data.clinicalClues || []
   const unlinkedClues = getUnlinkedClues(symptomSlots, clinicalClues)
+  const patientQuestionnaire = data.patientQuestionnaire || []
   const analysisStatus = data.analysis?.status || ''
   const isAnalysisPending = ['pending', 'running'].includes(analysisStatus)
   const isAnalysisFailed = ['failed', 'enqueue_failed', 'analysis_failed'].includes(analysisStatus) || data.status === 'analysis_failed'
@@ -265,17 +266,48 @@ export default function DoctorOnePager({
             </ul>
           </section>
 
-          {/* 카드 3: 기록용 문장 */}
+          {/* 카드 3: 환자 원문 확인용 문진 요약 + EMR 복사용 초안 */}
           <section className="op-card transfer-card">
             <div className="op-card-title">
-              <h4>기록용 문장</h4>
-              <span className="op-chip teal">EMR 복사</span>
+              <h4>환자 문진 요약</h4>
+              <span className="op-chip teal">원문 확인</span>
             </div>
-            <p className="transfer-text">{data.transferText}</p>
-            <button className="copy-btn" onClick={handleCopy}>
-              <CopyIcon />
-              {copied ? '복사됨!' : 'EMR로 복사'}
-            </button>
+            {patientQuestionnaire.length > 0 ? (
+              <div className="patient-summary-list">
+                {patientQuestionnaire.map(item => (
+                  <div className="patient-summary-row" key={item.id}>
+                    <div className="patient-summary-head">{item.label}</div>
+                    {item.original && (
+                      <div className="patient-summary-original">
+                        <span>원문</span>
+                        <p>"{item.original}"</p>
+                      </div>
+                    )}
+                    {item.standardized && item.standardized !== item.original && (
+                      <div className="patient-summary-standard">
+                        <span>표준화</span>
+                        <p>{item.standardized}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="transfer-text">환자 문진 원문이 아직 표시되지 않았습니다.</p>
+            )}
+
+            {data.transferText && (
+              <div className="emr-draft-box">
+                <div className="emr-draft-title">
+                  <span>EMR 복사용 초안</span>
+                  <button className="copy-btn compact" onClick={handleCopy}>
+                    <CopyIcon />
+                    {copied ? '복사됨!' : 'EMR로 복사'}
+                  </button>
+                </div>
+                <p className="transfer-text">{data.transferText}</p>
+              </div>
+            )}
           </section>
         </div>
 

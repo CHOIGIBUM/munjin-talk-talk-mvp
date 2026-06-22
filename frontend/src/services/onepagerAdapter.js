@@ -55,6 +55,7 @@ function normalizeCurrentBackend(raw) {
     patient,
     agenda,
     full_q4_transcript: getResponseText(session.responses, 'Q4'),
+    patientQuestionnaire: normalizePatientQuestionnaire(session.responses),
     uncategorized_remnant: (onepager.unresolved_items || []).map(x => x.display_text || x.normalized_text || x.source_quote).filter(Boolean).join(' / '),
     symptomSlots,
     clinicalClues,
@@ -159,6 +160,41 @@ function getResponseText(responses, qid) {
   if (!payload) return ''
   if (typeof payload === 'string') return payload
   return payload.text || payload.raw_transcript || ''
+}
+
+function normalizePatientQuestionnaire(responses = {}) {
+  const labels = {
+    Q1: 'Q1 주호소',
+    Q2: 'Q2 시작 시점',
+    Q3: 'Q3 복약·경과',
+    Q4: 'Q4 환자 질문',
+  }
+
+  return ['Q1', 'Q2', 'Q3', 'Q4']
+    .map(qid => {
+      const payload = responses?.[qid]
+      const original = getResponseText(responses, qid)
+      const standardized = getStandardizedText(payload)
+      if (!original && !standardized) return null
+      return {
+        id: qid,
+        label: labels[qid] || qid,
+        original,
+        standardized,
+      }
+    })
+    .filter(Boolean)
+}
+
+function getStandardizedText(payload) {
+  if (!payload || typeof payload === 'string') return ''
+  return (
+    payload.structured?.standardized_text ||
+    payload.standardized_text ||
+    payload.standard ||
+    payload.normalized_text ||
+    ''
+  )
 }
 
 function normalizeVisitType(value) {

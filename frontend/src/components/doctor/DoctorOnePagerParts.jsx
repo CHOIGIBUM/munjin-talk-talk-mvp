@@ -50,13 +50,17 @@ export function getUnlinkedClues(slots = [], clues = []) {
 
 export function ClueChip({ clue }) {
   const isPriority = clue.priority === '우선'
-  const text = clue.summary || clue.source_quote || ''
+  const summary = clue.summary || ''
+  const quote = clue.source_quote || ''
+  const text = summary || quote
+  const showQuote = Boolean(quote && quote !== summary)
   if (!text) return null
 
   return (
     <span className={`slot-clue-chip ${isPriority ? 'priority' : ''}`}>
       <b>{clue.label || clue.category}</b>
       <span>{text}</span>
+      {showQuote && <small>원문 "{quote}"</small>}
     </span>
   )
 }
