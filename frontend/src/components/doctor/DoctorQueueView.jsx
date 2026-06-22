@@ -20,6 +20,7 @@ const statusLabel = {
 
 export default function DoctorQueueView() {
   const [sessions, setSessions] = useState([])
+  const [notice, setNotice] = useState(null)
 
   useEffect(() => {
     const refresh = async () => {
@@ -66,27 +67,57 @@ export default function DoctorQueueView() {
       </header>
 
       <div className="dq-board">
-        {sorted.map((session) => (
-          <article key={session.sessionId} className={`dq-row ${session.risk === 'high' ? 'risk' : ''}`}>
-            <div className="dq-num">{session.queueNumber}</div>
-            <div className="dq-main">
-              <div className="dq-name">
-                <strong>{session.patient.name}</strong>
-                <span>{session.visitType === 'initial' ? '초진' : '재진'}</span>
-                {session.risk === 'high' && <mark>우선</mark>}
+        {sorted.map((session) => {
+          const isGenerating = session.status === 'analysis_pending'
+            || ['pending', 'running'].includes(session.analysisStatus || session.analysis_status || '')
+          const openGeneratingNotice = () => {
+            setNotice({
+              title: '원페이퍼 생성 중입니다',
+              body: `${session.patient.name} 환자의 문진은 완료되었지만 AI 분석이 아직 끝나지 않았습니다. 잠시 후 새로고침해서 다시 확인해 주세요.`,
+            })
+          }
+
+          return (
+            <article key={session.sessionId} className={`dq-row ${session.risk === 'high' ? 'risk' : ''}`}>
+              <div className="dq-num">{session.queueNumber}</div>
+              <div className="dq-main">
+                <div className="dq-name">
+                  <strong>{session.patient.name}</strong>
+                  <span>{session.visitType === 'initial' ? '초진' : '재진'}</span>
+                  {session.risk === 'high' && <mark>우선</mark>}
+                </div>
+                <p>
+                  {session.patient.age}세 {session.patient.gender} · {session.patient.department} · #{session.patient.receiptId}
+                </p>
               </div>
-              <p>
-                {session.patient.age}세 {session.patient.gender} · {session.patient.department} · #{session.patient.receiptId}
-              </p>
-            </div>
-            <span className={`dq-status ${session.status}`}>{statusLabel[session.status] || session.status}</span>
-            <div className="dq-actions">
-              <Link to={`/doctor/${session.sessionId}`}>원페이퍼</Link>
-              <Link to={`/guide/${session.sessionId}`}>안내문</Link>
-            </div>
-          </article>
-        ))}
+              <span className={`dq-status ${session.status}`}>{statusLabel[session.status] || session.status}</span>
+              <div className="dq-actions">
+                {isGenerating ? (
+                  <>
+                    <button type="button" onClick={openGeneratingNotice}>원페이퍼</button>
+                    <button type="button" onClick={openGeneratingNotice}>안내문</button>
+                  </>
+                ) : (
+                  <>
+                    <Link to={`/doctor/${session.sessionId}`}>원페이퍼</Link>
+                    <Link to={`/guide/${session.sessionId}`}>안내문</Link>
+                  </>
+                )}
+              </div>
+            </article>
+          )
+        })}
       </div>
+
+      {notice && (
+        <div className="dq-notice-backdrop" role="presentation" onClick={() => setNotice(null)}>
+          <div className="dq-notice-modal" role="dialog" aria-modal="true" aria-labelledby="dq-notice-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="dq-notice-title">{notice.title}</h2>
+            <p>{notice.body}</p>
+            <button type="button" onClick={() => setNotice(null)}>확인</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

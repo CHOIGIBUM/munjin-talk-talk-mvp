@@ -53,6 +53,7 @@ export default function PatientFlow({
   onTranscriptConfirmed,
   onComplete,
   onStaffCallRequest,
+  onExitToQueue,
 }) {
   const [step, setStep] = useState(initialVisitType && skipVisitTypeWhenPreset ? STEPS.Q_VOICE : STEPS.VISIT_TYPE)
   const [visitType, setVisitType] = useState(initialVisitType)
@@ -448,6 +449,7 @@ export default function PatientFlow({
           <StaffCallScreen
             patient={displayPatient}
             onReturn={handleStaffCallReturn}
+            onExitToQueue={onExitToQueue}
             returnLabel={prevStep === STEPS.VISIT_TYPE ? '진료 화면으로 돌아가기' : '문진 계속하기'}
           />
         )
@@ -473,6 +475,7 @@ export default function PatientFlow({
         <StaffCallScreen
           patient={displayPatient}
           onReturn={handleConsentStaffCallReturn}
+          onExitToQueue={onExitToQueue}
           returnLabel="동의 화면으로 돌아가기"
         />
       )

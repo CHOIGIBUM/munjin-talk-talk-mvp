@@ -1263,6 +1263,12 @@ body {
   font-weight: 800;
   color: var(--muted);
 }
+.staff-call-footer-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.staff-call-exit,
 .staff-call-return {
   width: 100%;
   margin-left: 0 !important;
@@ -1271,9 +1277,23 @@ body {
   justify-content: center !important;
   transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
+.staff-call-exit {
+  min-height: 56px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: white;
+  color: var(--navy);
+  font-weight: 1000;
+}
+.staff-call-exit:hover,
 .staff-call-return:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 22px rgba(37, 99, 235, 0.28) !important;
+}
+@media (max-width: 700px) {
+  .staff-call-footer-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ─── ManualIntakeScreen ─── */

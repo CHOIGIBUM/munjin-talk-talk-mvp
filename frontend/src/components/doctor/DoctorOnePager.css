@@ -85,6 +85,29 @@
   gap: 8px;
   flex-shrink: 0;
 }
+.op-analysis-lock-card {
+  border-style: dashed;
+  background: #f8fafc;
+}
+.op-analysis-lock-card h4 {
+  margin: 0 0 6px;
+  color: #0f2347;
+  font-size: 16px;
+  font-weight: 1000;
+}
+.op-analysis-lock-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+.op-analysis-lock-card.failed {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+.op-split-locked {
+  display: none;
+}
 
 .op-patient-bar {
   display: flex;

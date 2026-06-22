@@ -8,21 +8,15 @@ import './PatientKioskView.css'
 const TABLET_QUEUE_STATUSES = new Set([
   'waiting_tablet',
   'in_progress',
-  'staff_help',
-  'consent_rejected',
 ])
 
 const TABLET_STATUS_LABEL = {
   waiting_tablet: '준비됨',
   in_progress: '진행 중',
-  staff_help: '직원 확인 중',
-  consent_rejected: '직원 도움 필요',
 }
 
 function actionLabel(status) {
   if (status === 'in_progress') return '이어서 하기'
-  if (status === 'staff_help') return '직원 확인 보기'
-  if (status === 'consent_rejected') return '직원 도움 보기'
   return '문진 시작하기'
 }
 
@@ -84,6 +78,7 @@ export default function PatientTabletQueueView() {
           <div className="tablet-queue-empty">
             <strong>아직 준비된 문진이 없습니다</strong>
             <p>접수 직원이 준비해 드리면 이곳에 성함이 표시됩니다.</p>
+            <p>직원 도움이 필요한 문진은 접수 화면에서 따로 확인합니다.</p>
             <p>잠시만 기다려 주세요.</p>
           </div>
         )}

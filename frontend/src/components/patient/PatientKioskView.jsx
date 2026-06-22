@@ -58,6 +58,7 @@ export default function PatientKioskView() {
           console.warn('staff call request failed:', error)
         })
       }}
+      onExitToQueue={() => navigate('/patient')}
       onComplete={() => {
         window.setTimeout(() => navigate('/patient'), 3500)
       }}

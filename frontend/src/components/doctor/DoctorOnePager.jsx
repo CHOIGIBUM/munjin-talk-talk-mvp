@@ -132,32 +132,26 @@ export default function DoctorOnePager({
             <span>접수 {data.patient.receivedAt}</span>
           </p>
         </div>
-        {(onRefresh || onAiReview || onAnalysisRetry) && (
+        {!isAnalysisPending && !isAnalysisFailed && (onRefresh || onAiReview) && (
           <div className="op-toolbar">
-            <button
-              type="button"
-              className="op-tool-btn"
-              onClick={onRefresh}
-              disabled={onepagerStatus === 'refreshing' || onepagerStatus === 'reviewing' || onepagerStatus === 'retrying'}
-            >
-              새로고침
-            </button>
-            <button
-              type="button"
-              className="op-tool-btn op-tool-btn-primary"
-              onClick={onAiReview}
-              disabled={onepagerStatus === 'refreshing' || onepagerStatus === 'reviewing' || onepagerStatus === 'retrying'}
-            >
-              AI 재검토
-            </button>
-            {onAnalysisRetry && (
+            {onRefresh && (
               <button
                 type="button"
                 className="op-tool-btn"
-                onClick={onAnalysisRetry}
+                onClick={onRefresh}
                 disabled={onepagerStatus === 'refreshing' || onepagerStatus === 'reviewing' || onepagerStatus === 'retrying'}
               >
-                분석 다시 실행
+                새로고침
+              </button>
+            )}
+            {onAiReview && (
+              <button
+                type="button"
+                className="op-tool-btn op-tool-btn-primary"
+                onClick={onAiReview}
+                disabled={onepagerStatus === 'refreshing' || onepagerStatus === 'reviewing' || onepagerStatus === 'retrying'}
+              >
+                AI 재검토
               </button>
             )}
             {onepagerStatus && (
@@ -175,8 +169,19 @@ export default function DoctorOnePager({
         )}
       </div>
 
+      {(isAnalysisPending || isAnalysisFailed) && (
+        <section className={`op-card op-analysis-lock-card ${isAnalysisFailed ? 'failed' : 'pending'}`}>
+          <h4>{isAnalysisFailed ? '분석을 다시 실행해야 합니다' : '원페이퍼 생성 중입니다'}</h4>
+          <p>
+            {isAnalysisFailed
+              ? '환자 문진 원문은 저장되어 있습니다. 분석 다시 실행 후 원페이퍼를 확인해 주세요.'
+              : '아직 의료진 확인용 문서가 완성되지 않았습니다. 잠시 후 상태 새로고침을 눌러 주세요.'}
+          </p>
+        </section>
+      )}
+
       {/* 좌우 분할 */}
-      <div className="op-split">
+      <div className={`op-split ${isAnalysisPending || isAnalysisFailed ? 'op-split-locked' : ''}`}>
 
         {/* 좌측 3카드 */}
         <div className="op-left">
