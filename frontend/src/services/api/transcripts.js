@@ -39,3 +39,41 @@ export async function processTranscript({
   }
   return payload
 }
+
+// 환자 태블릿은 각 문항의 STT 결과를 먼저 화면에서 확인받습니다.
+// Q1~Q4가 모두 확정되면 이 함수가 한 번만 호출되고,
+// 서버는 같은 LangGraph 문항 파이프라인을 Q 순서대로 실행합니다.
+export async function processTranscriptsBatch({
+  sessionId,
+  questionSetId = 'default',
+  visitType,
+  answers,
+  role = '',
+}) {
+  ensureApiConfigured()
+
+  const res = await fetch(`${API_BASE_URL}/process-answers`, {
+    method: 'POST',
+    headers: await apiHeaders({ role, sessionId, json: true }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      question_set_id: questionSetId,
+      visit_type: visitType,
+      answers,
+    }),
+  })
+
+  const payload = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const message = payload?.message || payload?.error || '문진 일괄 처리에 실패했습니다.'
+    const error = new Error(message)
+    error.payload = payload
+    throw error
+  }
+  if (payload.validator_passed === false) {
+    const error = new Error('문진 결과 검증에 실패했습니다. 다시 확인해 주세요.')
+    error.payload = payload
+    throw error
+  }
+  return payload
+}

@@ -14,6 +14,7 @@ export {
 
 export {
   processTranscript,
+  processTranscriptsBatch,
 } from './api/transcripts.js'
 
 export {

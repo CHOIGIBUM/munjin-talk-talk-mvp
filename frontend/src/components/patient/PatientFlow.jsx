@@ -16,7 +16,7 @@ import PrivacyConsentModal, {
 import { QUESTIONS } from '../../config/questions.js'
 import { questionTextForBackend } from '../../config/questionText.js'
 import { detectSafetyKeyword } from '../../config/safetyKeywords.js'
-import { getQuestionSet, processTranscript, recordPatientConsent } from '../../services/api.js'
+import { getQuestionSet, processTranscriptsBatch, recordPatientConsent } from '../../services/api.js'
 
 const EMPTY_PATIENT = {
   name: '환자',
@@ -40,7 +40,8 @@ function consentStorageKey(sessionId) {
 }
 
 // 환자 태블릿 문진의 상태 머신입니다.
-// 실시간 Transcribe가 화면에 바로 텍스트를 보여주므로 별도 STT 확인 화면은 두지 않습니다.
+// 환자는 각 문항의 STT 결과를 직접 확인하고, LLM/LangGraph 처리는 Q1~Q4가
+// 모두 모인 뒤 한 번에 실행합니다. 문항마다 LLM 대기 시간을 만들지 않기 위함입니다.
 export default function PatientFlow({
   initialVisitType = null,
   patient = null,
@@ -61,7 +62,6 @@ export default function PatientFlow({
   const [answers, setAnswers] = useState([])
   const [prevStep, setPrevStep] = useState(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
-  const [pendingSafetyResult, setPendingSafetyResult] = useState(null)
   const [isEndingIntake, setIsEndingIntake] = useState(false)
   const [intakeStopped, setIntakeStopped] = useState(false)
   const [consentAccepted, setConsentAccepted] = useState(false)
@@ -75,6 +75,19 @@ export default function PatientFlow({
   const currentQuestion = questions[questionIndex]
   const activeSessionId = sessionId || ''
   const displayPatient = patient || EMPTY_PATIENT
+
+  const notifyStaff = useCallback((payload) => {
+    try {
+      const result = onStaffCallRequest?.(payload)
+      if (result && typeof result.catch === 'function') {
+        result.catch((error) => {
+          console.warn('staff call request failed:', error)
+        })
+      }
+    } catch (error) {
+      console.warn('staff call request failed:', error)
+    }
+  }, [onStaffCallRequest])
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -131,10 +144,10 @@ export default function PatientFlow({
     } finally {
       setConsentSaving(false)
     }
-  }, [activeSessionId, currentQuestion, onStaffCallRequest])
+  }, [activeSessionId])
 
   const handleConsentStaffHelp = useCallback(() => {
-    onStaffCallRequest?.({
+    notifyStaff({
       sessionId: activeSessionId,
       questionId: currentQuestion?.id || null,
       step: 'privacy_consent',
@@ -142,7 +155,7 @@ export default function PatientFlow({
     })
     setPrevStep('privacy_consent')
     setStep(STEPS.STAFF_CALL)
-  }, [activeSessionId, currentQuestion, onStaffCallRequest])
+  }, [activeSessionId, currentQuestion, notifyStaff])
 
   const handleConsentStaffCallReturn = useCallback(() => {
     setPrevStep(null)
@@ -150,14 +163,14 @@ export default function PatientFlow({
   }, [initialVisitType, skipVisitTypeWhenPreset])
 
   const handleStaffCall = useCallback(() => {
-    onStaffCallRequest?.({
+    notifyStaff({
       sessionId: activeSessionId,
       questionId: currentQuestion?.id || null,
       step,
     })
     setPrevStep(step)
     setStep(STEPS.STAFF_CALL)
-  }, [activeSessionId, currentQuestion, onStaffCallRequest, step])
+  }, [activeSessionId, currentQuestion, notifyStaff, step])
 
   const handleStaffCallReturn = useCallback(() => {
     setStep(prevStep || STEPS.VISIT_TYPE)
@@ -171,30 +184,74 @@ export default function PatientFlow({
     setStep(STEPS.Q_VOICE)
   }, [])
 
-  const advanceWithConfirmedAnswer = useCallback((result, answerText) => {
+  const submitBatchAndComplete = useCallback(async (pendingAnswers, { stopped = false } = {}) => {
+    if (!activeSessionId) throw new Error('missing_session')
+    setIsTranscribing(true)
+    try {
+      const payload = await processTranscriptsBatch({
+        sessionId: activeSessionId,
+        questionSetId: questionSetId || 'default',
+        visitType,
+        answers: pendingAnswers.map(toBatchPayloadAnswer),
+      })
+      const resultByQuestion = new Map(
+        (payload.results || []).map((row) => [row.question_id || row.questionId, row.result])
+      )
+      const completedAnswers = pendingAnswers.map((answer) => ({
+        ...answer,
+        result: resultByQuestion.get(answer.id) || resultByQuestion.get(answer.questionId) || answer.result || null,
+      }))
+      setAnswers(completedAnswers)
+      completedAnswers.forEach((answer) => onTranscriptConfirmed?.(answer))
+      onComplete?.({
+        sessionId: activeSessionId,
+        visitType,
+        answers: completedAnswers,
+        stopped,
+      })
+      setTranscript('')
+      setSafetyKeyword(null)
+      setIntakeStopped(stopped)
+      setStep(STEPS.DONE)
+    } catch (err) {
+      console.error('batch intake processing failed:', err)
+      const failedIndex = Math.max(0, Number(err?.payload?.batch_index || pendingAnswers.length) - 1)
+      const failedAnswer = pendingAnswers[failedIndex] || pendingAnswers[pendingAnswers.length - 1]
+      setAnswers(pendingAnswers.slice(0, failedIndex))
+      setQuestionIndex(Math.min(failedIndex, Math.max(0, questions.length - 1)))
+      setTranscript(failedAnswer?.transcript || '')
+      setSafetyKeyword(null)
+      setStep(STEPS.Q_CONFIRM)
+    } finally {
+      setIsTranscribing(false)
+    }
+  }, [
+    activeSessionId,
+    onComplete,
+    onTranscriptConfirmed,
+    questionSetId,
+    questions.length,
+    visitType,
+  ])
+
+  const advanceWithConfirmedAnswer = useCallback(async (answerText) => {
     if (!currentQuestion) return
     const confirmedAnswer = {
       id: currentQuestion.id,
       questionId: currentQuestion.id,
       transcript: answerText,
       question_type: currentQuestion.question_type,
-      result,
+      questionText: questionTextForBackend(currentQuestion),
+      result: null,
     }
     const nextAnswers = [...answers, confirmedAnswer]
 
-    onTranscriptConfirmed?.(confirmedAnswer)
     setAnswers(nextAnswers)
     setTranscript('')
-    setPendingSafetyResult(null)
     setSafetyKeyword(null)
 
     if (questionIndex >= questions.length - 1) {
-      onComplete?.({
-        sessionId: activeSessionId,
-        visitType,
-        answers: nextAnswers,
-      })
-      setStep(STEPS.DONE)
+      await submitBatchAndComplete(nextAnswers)
       return
     }
 
@@ -203,27 +260,10 @@ export default function PatientFlow({
   }, [
     answers,
     currentQuestion,
-    onComplete,
-    onTranscriptConfirmed,
     questionIndex,
     questions.length,
-    activeSessionId,
-    visitType,
+    submitBatchAndComplete,
   ])
-
-  const runBackendPipeline = useCallback(async (answerText) => {
-    if (!currentQuestion) throw new Error('missing_question')
-    if (!activeSessionId) throw new Error('missing_session')
-    return processTranscript({
-      sessionId: activeSessionId,
-      questionId: currentQuestion.id,
-      questionType: currentQuestion.question_type,
-      questionText: questionTextForBackend(currentQuestion),
-      questionSetId: questionSetId || 'default',
-      visitType,
-      transcript: answerText,
-    })
-  }, [activeSessionId, currentQuestion, visitType])
 
   const handleVoiceFinish = useCallback((sttText) => {
     const answerText = String(sttText || '').trim()
@@ -247,14 +287,12 @@ export default function PatientFlow({
       return
     }
     setTranscript(answerText)
-    setIsTranscribing(true)
 
     try {
       const safety = detectSafetyKeyword(answerText)
       if (safety && safety.severity === 'high') {
         setSafetyKeyword(safety)
-        setPendingSafetyResult(null)
-        onStaffCallRequest?.({
+        notifyStaff({
           sessionId: activeSessionId,
           questionId: currentQuestion?.id || null,
           step: STEPS.SAFETY_ALERT,
@@ -264,45 +302,27 @@ export default function PatientFlow({
         return
       }
 
-      const result = await runBackendPipeline(answerText)
-      if (result.safety_flag && result.safety_flag.severity === 'high') {
-        setSafetyKeyword(result.safety_flag)
-        setPendingSafetyResult(result)
-        setStep(STEPS.SAFETY_ALERT)
-        return
-      }
-
-      advanceWithConfirmedAnswer(result, answerText)
+      await advanceWithConfirmedAnswer(answerText)
     } catch (err) {
       console.error('STT/process failed:', err)
       setTranscript('문진 처리 중 오류가 발생했습니다. 다시 말씀해 주세요.')
       setStep(STEPS.Q_VOICE)
-    } finally {
-      setIsTranscribing(false)
     }
-  }, [activeSessionId, advanceWithConfirmedAnswer, currentQuestion, onStaffCallRequest, runBackendPipeline, transcript])
+  }, [activeSessionId, advanceWithConfirmedAnswer, currentQuestion, notifyStaff, transcript])
 
   const handleSafetyContinue = useCallback(async () => {
     const answerText = transcript.trim()
-    setIsTranscribing(true)
     try {
-      if (pendingSafetyResult) {
-        advanceWithConfirmedAnswer(pendingSafetyResult, answerText)
-        return
-      }
       if (!answerText) {
         setStep(STEPS.Q_VOICE)
         return
       }
-      const result = await runBackendPipeline(answerText)
-      advanceWithConfirmedAnswer(result, answerText)
+      await advanceWithConfirmedAnswer(answerText)
     } catch (err) {
       console.error('Safety continue failed:', err)
       setStep(STEPS.Q_VOICE)
-    } finally {
-      setIsTranscribing(false)
     }
-  }, [advanceWithConfirmedAnswer, pendingSafetyResult, runBackendPipeline, transcript])
+  }, [advanceWithConfirmedAnswer, transcript])
 
   const handleSafetyEnd = useCallback(async () => {
     setIsEndingIntake(true)
@@ -310,46 +330,45 @@ export default function PatientFlow({
     let nextAnswers = answers
 
     try {
-      let result = pendingSafetyResult
-      if (!result && answerText && currentQuestion) {
-        result = await runBackendPipeline(answerText)
-      }
-      if (result && currentQuestion && answerText) {
+      if (currentQuestion && answerText) {
         const confirmedAnswer = {
           id: currentQuestion.id,
           questionId: currentQuestion.id,
           transcript: answerText,
           question_type: currentQuestion.question_type,
-          result,
+          questionText: questionTextForBackend(currentQuestion),
+          result: null,
         }
         nextAnswers = [...answers, confirmedAnswer]
-        onTranscriptConfirmed?.(confirmedAnswer)
         setAnswers(nextAnswers)
+      }
+      if (nextAnswers.length) {
+        await submitBatchAndComplete(nextAnswers, { stopped: true })
+        return
       }
     } catch (err) {
       console.error('Safety end failed:', err)
     } finally {
-      onComplete?.({
-        sessionId: activeSessionId,
-        visitType,
-        answers: nextAnswers,
-        stopped: true,
-      })
       setTranscript('')
-      setPendingSafetyResult(null)
       setSafetyKeyword(null)
       setIntakeStopped(true)
       setIsEndingIntake(false)
-      setStep(STEPS.DONE)
+      if (!nextAnswers.length) {
+        onComplete?.({
+          sessionId: activeSessionId,
+          visitType,
+          answers: nextAnswers,
+          stopped: true,
+        })
+        setStep(STEPS.DONE)
+      }
     }
   }, [
     answers,
     currentQuestion,
     onComplete,
-    onTranscriptConfirmed,
-    pendingSafetyResult,
-    runBackendPipeline,
     activeSessionId,
+    submitBatchAndComplete,
     transcript,
     visitType,
   ])
@@ -472,4 +491,13 @@ export default function PatientFlow({
       {!consentAccepted && renderConsentGate()}
     </TabletFrame>
   )
+}
+
+function toBatchPayloadAnswer(answer) {
+  return {
+    question_id: answer.questionId || answer.id,
+    question_type: answer.question_type || answer.questionType,
+    question_text: answer.questionText || '',
+    transcript: answer.transcript || '',
+  }
 }

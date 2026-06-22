@@ -53,7 +53,9 @@ export default function PatientKioskView() {
       frameVariant="device"
       skipVisitTypeWhenPreset={false}
       onStaffCallRequest={() => {
-        requestStaffHelp(session.sessionId)
+        requestStaffHelp(session.sessionId).catch((error) => {
+          console.warn('staff call request failed:', error)
+        })
       }}
     />
   )

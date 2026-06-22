@@ -165,6 +165,12 @@ Resources:
             ApiId: !Ref MunjinHttpApi
             Path: /process-answer
             Method: POST
+        ProcessAnswers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MunjinHttpApi
+            Path: /process-answers
+            Method: POST
         DoctorQueue:
           Type: HttpApi
           Properties:

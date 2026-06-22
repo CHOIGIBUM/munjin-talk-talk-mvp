@@ -13,7 +13,7 @@ from urllib.parse import unquote_plus
 from audio import generate_streaming_transcribe_url
 from guide import get_guide, save_doctor_response
 from onepager import get_onepager_payload, rerun_onepager_review
-from orchestration import process_answer
+from orchestration import process_answer, process_answers
 from question_sets import public_question_set
 from security import is_auth_configured, issue_role_token, require_patient_session, require_role, role_for_event, verify_access_code
 from sessions import create_session, get_session, list_sessions, public_session, save_patient_consent, update_session
@@ -137,6 +137,16 @@ def route(method, path, event):
         if auth_error:
             return auth_error
         payload, err = process_answer(body)
+        return err or response(200, payload)
+
+    if method == "POST" and path == "/process-answers":
+        session = get_session(body.get("session_id") or body.get("sessionId"))
+        if not session:
+            return response(404, {"error": "session_not_found"})
+        auth_error = require_patient_session(event, session, body, allow_roles=("staff",))
+        if auth_error:
+            return auth_error
+        payload, err = process_answers(body)
         return err or response(200, payload)
 
     match = re.fullmatch(r"/question-sets/([^/]+)", path)
