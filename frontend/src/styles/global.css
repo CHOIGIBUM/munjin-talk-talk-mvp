@@ -79,6 +79,9 @@ body {
   font-size: 18px;
 }
 .mode-switcher.collapsed .mode-switcher-items {
+  display: none;
+  width: 0;
+  height: 0;
   max-width: 0;
   opacity: 0;
   pointer-events: none;
@@ -89,12 +92,13 @@ body {
   box-shadow: 0 8px 22px rgba(15, 35, 71, 0.12);
 }
 .mode-switcher.collapsed .mode-switcher-toggle {
-  min-height: 28px;
-  padding: 5px 10px;
+  min-width: 54px;
+  min-height: 30px;
+  padding: 5px 9px;
   gap: 4px;
 }
 .mode-switcher.collapsed .mode-switcher-toggle-icon {
-  font-size: 15px;
+  font-size: 14px;
 }
 .mode-switcher.collapsed .mode-switcher-toggle-text {
   font-size: 10.5px;
