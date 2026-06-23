@@ -179,12 +179,26 @@ Review item rules:
 14. Return JSON only. No markdown, no prose outside JSON.
 15. The backend validates this with a strict Pydantic schema. Missing required fields, invalid keys, or extra fields will fail.
 
+EMR transfer_text rules:
+1. Write transfer_text as a Korean outpatient charting draft, not as a patient-facing explanation.
+2. Use a compact SOAP-like intake-note style in one line because this is generated before the physical exam:
+   "S: ... | O: 문진 기반 객관소견 없음 | A/P: 진료 시 확인 필요 - ..."
+3. The S section may include only intake-grounded items:
+   - age/sex/visit type exactly from draft_onepager.patient_summary
+   - chief complaints from symptom_slots
+   - onset/progression/current context from clinical_clues
+   - medication/adherence context from clinical_clues
+   - patient questions from agenda
+4. Do NOT invent diagnosis, prescriptions, test orders, vital signs, physical exam findings, or clinician decisions.
+5. If there is no objective finding in the provided intake, write exactly "O: 문진 기반 객관소견 없음".
+6. Keep it concise and copyable. Good style:
+   "S: 23세 남성 초진. CC 목통증, 콧물. 어제부터 시작. 복용약 없음. Q 매운 음식 섭취 가능 여부 문의 | O: 문진 기반 객관소견 없음 | A/P: 진료 시 지속기간/발열 여부 확인"
+7. If transfer_text mentions age or sex, copy them exactly from draft_onepager.patient_summary. Never change patient sex or age.
+
 Output quality target:
 - Ordinary low-risk cases: 2 to 5 review_items.
 - Safety or complex cases: up to 8 review_items, urgent items first.
 - doctor_brief: 1 to 3 sections that summarize why those tasks matter.
-- transfer_text: one concise Korean EMR-style sentence or two short sentences, grounded only in intake data.
-- If transfer_text mentions age or sex, copy them exactly from draft_onepager.patient_summary. Never change patient sex or age.
 
 Return schema:
 {{

@@ -195,14 +195,35 @@ def agenda_label(category):
 
 
 def build_transfer_text(patient, slots, clinical, agenda, visit_type):
-    """EMR 복사용 초안 문장을 onepaper JSON 근거만으로 만듭니다."""
+    """EMR 복사용 초안 문장을 onepaper JSON 근거만으로 만듭니다.
+
+    LLM review가 실패하더라도 의사가 복사할 수 있는 최소 차팅 초안이 필요합니다.
+    진찰 전 문진 자료이므로 객관소견/진단/처방을 만들지 않고, S 중심의 간단한
+    SOAP-like 문장으로 제한합니다.
+    """
+    demographics = f"{patient.get('age') or '-'}세 {patient.get('gender') or ''} {visit_label(visit_type)}"
     symptoms = ", ".join(unique([slot.get("name") for slot in slots if slot.get("name")]))
-    text = f"{patient.get('age') or '-'}세 {patient.get('gender') or ''} {visit_label(visit_type)} 환자."
+    contexts = [
+        c.get("summary")
+        for c in clinical
+        if c.get("summary") and c.get("category") in {"증상맥락", "재진경과", "복약정보", "복약순응도", "약물반응"}
+    ]
+    agenda_texts = [item.get("summary") for item in agenda if item.get("summary")]
+
+    s_parts = [demographics]
     if symptoms:
-        text += f" {symptoms} 호소."
-    med = next((c.get("summary") for c in clinical if c.get("category") == "복약정보"), "")
-    if med:
-        text += f" {med}."
-    if agenda:
-        text += f" 환자 질문: {agenda[0].get('summary')}."
-    return text
+        s_parts.append(f"CC {symptoms}")
+    s_parts.extend(unique(contexts)[:3])
+    if agenda_texts:
+        s_parts.append(f"Q {agenda_texts[0]}")
+
+    subjective = ". ".join(part for part in s_parts if part)
+    plan_basis = []
+    if symptoms:
+        plan_basis.append("증상 지속기간/중증도 확인")
+    if agenda_texts:
+        plan_basis.append("환자 질문 답변")
+    if not plan_basis:
+        plan_basis.append("문진 내용 확인")
+
+    return f"S: {subjective} | O: 문진 기반 객관소견 없음 | A/P: 진료 시 {' 및 '.join(plan_basis)} 필요"

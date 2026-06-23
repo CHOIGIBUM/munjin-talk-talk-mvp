@@ -17,6 +17,10 @@ export const CheckIcon = () => (
 const SYMPTOM_CONTEXT_CATEGORIES = ['증상맥락', '재진경과']
 const STANDALONE_CONTEXT_CATEGORIES = ['증상맥락', '재진경과', '복약정보', '복약순응도', '약물반응']
 
+function clueTextKey(text) {
+  return String(text || '').replace(/[^0-9A-Za-z가-힣]+/g, '')
+}
+
 export function clueKey(clue) {
   return clue.id || `${clue.category || ''}-${clue.source_question || ''}-${clue.source_quote || clue.summary || ''}`
 }
@@ -24,13 +28,20 @@ export function clueKey(clue) {
 export function getCluesForSlot(slot, clues = []) {
   return (clues || []).filter((clue) => {
     const relatedSymptoms = clue.related_symptoms || []
-    const sameSymptom = relatedSymptoms.length === 1 && relatedSymptoms.includes(slot.name)
-    const sameQuestion = clue.source_question && slot.sourceQuestion && clue.source_question === slot.sourceQuestion
+    const slotNames = [slot.name, slot.normalizedText]
+      .map(clueTextKey)
+      .filter(Boolean)
+    const sameSymptom = relatedSymptoms.some((name) => {
+      const related = clueTextKey(name)
+      return related && slotNames.some((slotName) => slotName.includes(related) || related.includes(slotName))
+    })
     const clueQuote = clue.source_quote || clue.summary || ''
     const slotQuote = slot.sourceQuote || slot.normalizedText || ''
     const sameQuote = Boolean(clueQuote && slotQuote && (slotQuote.includes(clueQuote) || clueQuote.includes(slotQuote)))
     const isSymptomContext = SYMPTOM_CONTEXT_CATEGORIES.includes(clue.category)
-    return isSymptomContext && (sameQuote || sameSymptom || (!relatedSymptoms.length && sameQuestion))
+    // 같은 질문에서 나온 단서라는 이유만으로 증상 카드에 붙이지 않습니다.
+    // 예: "목 통증은 어제부터" 단서가 같은 Q1의 콧물/가래 카드까지 번지는 것을 막습니다.
+    return isSymptomContext && (sameQuote || sameSymptom)
   }).slice(0, 4)
 }
 
