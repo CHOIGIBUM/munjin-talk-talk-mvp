@@ -62,7 +62,6 @@ export default function PatientFlow({
   const [safetyKeyword, setSafetyKeyword] = useState(null)
   const [answers, setAnswers] = useState([])
   const [prevStep, setPrevStep] = useState(null)
-  const [isTranscribing, setIsTranscribing] = useState(false)
   const [isEndingIntake, setIsEndingIntake] = useState(false)
   const [intakeStopped, setIntakeStopped] = useState(false)
   const [consentAccepted, setConsentAccepted] = useState(false)
@@ -185,62 +184,49 @@ export default function PatientFlow({
     setStep(STEPS.Q_VOICE)
   }, [])
 
-  const submitBatchAndComplete = useCallback(async (pendingAnswers, { stopped = false } = {}) => {
+  const submitBatchAndComplete = useCallback((pendingAnswers, { stopped = false } = {}) => {
     if (!activeSessionId) throw new Error('missing_session')
-    setIsTranscribing(true)
-    try {
-      const payload = await processTranscriptsBatch({
+
+    const completedAnswers = pendingAnswers.map((answer) => ({
+      ...answer,
+      result: answer.result || {
+        analysis_status: 'pending',
+        analysis_queued: true,
+      },
+    }))
+
+    // 환자 경험은 "답변 확인 완료"를 기준으로 즉시 종료한다.
+    // 저장과 LangGraph 분석 큐 등록은 뒤에서 진행하고, 실패 시 직원에게만 알린다.
+    setAnswers(completedAnswers)
+    completedAnswers.forEach((answer) => onTranscriptConfirmed?.(answer))
+    onComplete?.({
+      sessionId: activeSessionId,
+      visitType,
+      answers: completedAnswers,
+      stopped,
+    })
+    setTranscript('')
+    setSafetyKeyword(null)
+    setIntakeStopped(stopped)
+    setStep(STEPS.DONE)
+
+    processTranscriptsBatch({
         sessionId: activeSessionId,
         questionSetId: questionSetId || 'default',
         visitType,
         answers: pendingAnswers.map(toBatchPayloadAnswer),
       })
-      const completedAnswers = pendingAnswers.map((answer) => ({
-        ...answer,
-        result: answer.result || {
-          analysis_status: payload.analysis_status || 'pending',
-          analysis_queued: payload.analysis_queued !== false,
-        },
-      }))
-      setAnswers(completedAnswers)
-      completedAnswers.forEach((answer) => onTranscriptConfirmed?.(answer))
-      onComplete?.({
-        sessionId: activeSessionId,
-        visitType,
-        answers: completedAnswers,
-        stopped,
+      .catch((err) => {
+        console.error('batch intake processing failed:', err)
+        const failedIndex = Math.max(0, Number(err?.payload?.batch_index || pendingAnswers.length) - 1)
+        notifyStaff({
+          sessionId: activeSessionId,
+          questionId: pendingAnswers[failedIndex]?.questionId || pendingAnswers[failedIndex]?.id || null,
+          step: 'batch_processing_failed',
+          reason: 'batch_processing_failed',
+          batchIndex: failedIndex + 1,
+        })
       })
-      setTranscript('')
-      setSafetyKeyword(null)
-      setIntakeStopped(stopped)
-      setStep(STEPS.DONE)
-    } catch (err) {
-      console.error('batch intake processing failed:', err)
-      const failedIndex = Math.max(0, Number(err?.payload?.batch_index || pendingAnswers.length) - 1)
-      const completedAnswers = pendingAnswers.map((answer) => ({
-        ...answer,
-        result: answer.result || null,
-      }))
-
-      // 여기까지 오면 LLM 분석 실패가 아니라 Q1~Q4 원문 저장 자체가 실패한 상황이다.
-      // 환자를 이전 질문으로 되돌리지 않고 직원 도움 화면으로 고정해, 접수처에서 수기 확인하게 한다.
-      setAnswers(completedAnswers)
-      completedAnswers.forEach((answer) => onTranscriptConfirmed?.(answer))
-      notifyStaff({
-        sessionId: activeSessionId,
-        questionId: pendingAnswers[failedIndex]?.questionId || pendingAnswers[failedIndex]?.id || null,
-        step: 'batch_processing_failed',
-        reason: 'batch_processing_failed',
-        batchIndex: failedIndex + 1,
-      })
-      setTranscript('')
-      setSafetyKeyword(null)
-      setIntakeStopped(true)
-      setPrevStep(null)
-      setStep(STEPS.STAFF_CALL)
-    } finally {
-      setIsTranscribing(false)
-    }
   }, [
     activeSessionId,
     notifyStaff,
@@ -410,7 +396,7 @@ export default function PatientFlow({
             question={currentQuestion}
             stepIndex={questionIndex + 1}
             partialText={transcript}
-            isProcessing={isTranscribing}
+            isProcessing={false}
             onFinish={handleVoiceFinish}
             onStaffCall={handleStaffCall}
           />
@@ -424,7 +410,7 @@ export default function PatientFlow({
             question={currentQuestion}
             stepIndex={questionIndex + 1}
             transcript={transcript}
-            isProcessing={isTranscribing}
+            isProcessing={false}
             onConfirm={handleConfirmTranscript}
             onRetry={handleRetryTranscript}
             onStaffCall={handleStaffCall}
@@ -440,7 +426,7 @@ export default function PatientFlow({
             safetyKeyword={safetyKeyword}
             onContinue={handleSafetyContinue}
             onEnd={handleSafetyEnd}
-            isEnding={isEndingIntake || isTranscribing}
+            isEnding={isEndingIntake}
           />
         )
 
