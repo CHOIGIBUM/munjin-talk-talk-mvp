@@ -15,7 +15,13 @@ const CheckCircleIcon = () => (
 )
 
 
-export default function DoneScreen({ patient, visitType, stopped = false, queueNumber = null }) {
+export default function DoneScreen({
+  patient,
+  visitType,
+  stopped = false,
+  queueNumber = null,
+  onExitToQueue,
+}) {
   const displayQueueNumber = Number(queueNumber || patient?.queueNumber || 0)
 
   return (
@@ -57,6 +63,16 @@ export default function DoneScreen({ patient, visitType, stopped = false, queueN
             {displayQueueNumber > 0 && <small>번</small>}
           </span>
         </div>
+
+        {onExitToQueue && (
+          <button
+            type="button"
+            className="done-return-queue-button"
+            onClick={onExitToQueue}
+          >
+            문진 대기열로 돌아가기
+          </button>
+        )}
       </div>
     </>
   )

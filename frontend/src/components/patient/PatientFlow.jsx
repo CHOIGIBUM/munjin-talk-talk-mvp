@@ -172,11 +172,6 @@ export default function PatientFlow({
     setStep(STEPS.STAFF_CALL)
   }, [activeSessionId, currentQuestion, notifyStaff, step])
 
-  const handleStaffCallReturn = useCallback(() => {
-    setStep(prevStep || STEPS.VISIT_TYPE)
-    setPrevStep(null)
-  }, [prevStep])
-
   const handleVisitTypeConfirm = useCallback((path) => {
     setVisitType(path)
     setQuestionIndex(0)
@@ -326,6 +321,18 @@ export default function PatientFlow({
     }
   }, [advanceWithConfirmedAnswer, transcript])
 
+  const handleStaffCallReturn = useCallback(() => {
+    // 안전 플래그 화면에서 직원 도움을 받은 뒤에는 같은 경고 화면으로 되돌리지 않는다.
+    // 현재 답변을 확정하고 다음 문항으로 넘겨야 태블릿 흐름이 막히지 않는다.
+    if (prevStep === STEPS.SAFETY_ALERT) {
+      setPrevStep(null)
+      handleSafetyContinue()
+      return
+    }
+    setStep(prevStep || STEPS.VISIT_TYPE)
+    setPrevStep(null)
+  }, [handleSafetyContinue, prevStep])
+
   const handleSafetyEnd = useCallback(async () => {
     setIsEndingIntake(true)
     const answerText = transcript.trim()
@@ -447,6 +454,7 @@ export default function PatientFlow({
             visitType={visitType}
             stopped={intakeStopped}
             queueNumber={queueNumber}
+            onExitToQueue={onExitToQueue}
           />
         )
 

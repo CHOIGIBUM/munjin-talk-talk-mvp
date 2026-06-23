@@ -41,12 +41,12 @@ export default function SafetyAlertScreen({
 
         <p className="safety-message safety-message-large">
           문진을 더 정확하게 진행하기 위해<br/>
-          접수 직원에게 도움 요청을 보냈습니다.
+          접수 직원에게 확인 알림을 보냈습니다.
         </p>
 
         <div className="safety-reassure safety-reassure-v4">
           놀라실 필요 없어요.<br/>
-          화면이 멈춘 것이 아니라 직원 확인 후 계속 진행할 수 있습니다.
+          계속 진행하셔도 되고, 직원에게 맡기고 기다리셔도 됩니다.
         </div>
       </div>
 
@@ -66,7 +66,7 @@ export default function SafetyAlertScreen({
             onClick={onContinue}
             disabled={isEnding}
           >
-            직원과 계속하기
+            다음 질문으로 계속
           </button>
         </div>
       </div>
