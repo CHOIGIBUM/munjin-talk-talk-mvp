@@ -57,21 +57,6 @@
 | 👨‍⚕️ 의료진 원페이퍼 | `/doctor/:sessionId` | 증상·원문 quote·문진 맥락·확인 항목·EMR 초안 |
 | 📄 환자 안내문 | `/guide/:sessionId` | 의사 답변을 어르신 표현으로 정리 + 종이 출력 |
 
-<!-- ───────────────────────────────────────────────
-  DEMO 스크린샷 4컷. 화면별 캡처를 아래 경로에 저장 후 주석 해제.
-  심사자는 글보다 화면을 먼저 봅니다. 이 4장이 README의 승부처입니다.
-─────────────────────────────────────────────── -->
-<!--
-<div align="center">
-<img src="docs/readme-assets/screen-staff.png"   width="380" alt="직원 접수">
-<img src="docs/readme-assets/screen-tablet.png"  width="380" alt="환자 태블릿 음성 문진">
-<img src="docs/readme-assets/screen-doctor.png"  width="380" alt="의료진 원페이퍼">
-<img src="docs/readme-assets/screen-guide.png"   width="380" alt="환자 안내문">
-</div>
--->
-
----
-
 ## 🛡️ 왜 LLM에 전부 맡기지 않았나 — 이 프로젝트의 차별점
 
 의료 도메인에서 "LLM이 알아서 판단" 은 곧 위험입니다. 문진톡톡은 LLM을 **통제된 한 부품**으로만 씁니다. 이게 다른 챗봇형 데모와 구분되는 지점입니다.

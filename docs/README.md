@@ -38,7 +38,6 @@
 | [DEPLOYMENT.md](DEPLOYMENT.md) | AWS 배포 절차와 운영 설정 |
 | [MVP_SETUP.md](MVP_SETUP.md) | 로컬 실행과 시연 준비 |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | 전체 코드 구조와 파일별 책임 |
-| [readme-assets/PLACE_IMAGES_HERE.md](readme-assets/PLACE_IMAGES_HERE.md) | README용 화면 이미지 배치 안내 |
 
 ---
 
@@ -61,7 +60,7 @@
 - 해커톤 제출 문서는 “무엇을 만들었는가”보다 “왜 그렇게 설계했는가”가 보이도록 작성합니다.
 - 의료 데이터 설명은 저장 위치, 보관 기간, 접근 경로, 비공개 처리 기준을 함께 적습니다.
 - AI 설명은 모델 이름보다 입력, 출력, validator, 실패 처리 경로를 먼저 적습니다.
-- 구현 예정이거나 아이디어 단계인 내용은 실제 구현 내용과 섞지 않습니다.
+- 문서에는 현재 코드와 운영 환경에 반영된 구현 내용을 기준으로 적습니다.
 - 로컬 평가 데이터, 환자 발화 원문, 비공개 원천 데이터 경로는 공개 문서에 넣지 않습니다.
 
 ---
