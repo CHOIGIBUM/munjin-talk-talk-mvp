@@ -350,20 +350,19 @@ munjin-talk-talk/
 
 ---
 
-## 운영 보안 수준
+## 🛡️ 운영 보안 수준
 
-이 섹션은 배포 환경에서 적용한 인프라 보안 설정을 설명합니다. 문진톡톡은 의료 문진 텍스트가 오가는 서비스를 전제로, 음성 원본 미저장·가명처리·저장 최소화·접근 제어를 기본 원칙으로 설계했습니다.
+이 섹션은 코드 설정과 AWS 콘솔에서 적용한 운영 보안 설정을 함께 정리합니다. 문진톡톡은 의료 문진 텍스트가 오가는 서비스를 전제로, 음성 원본 미저장·가명처리·저장 최소화·접근 제어를 기본 원칙으로 설계했습니다.
 
 | 구분 | 적용 내용 |
 | --- | --- |
 | 접근 제어 | 직원/의사 접근 코드 로그인, 만료 세션 토큰, 환자 세션 토큰 |
 | 음성 처리 | 음성 원본 미저장 Transcribe Streaming |
-| 저장 최소화 | DynamoDB에는 상태와 S3 pointer만 저장, S3에는 가명처리 artifact 저장 |
+| 저장 최소화 | DynamoDB에는 상태와 S3 artifact key만 저장, S3에는 가명처리 artifact 저장 |
 | 보관 기간 | DynamoDB TTL, S3 Lifecycle 3일 삭제, CloudWatch Logs 보존 기간 제한 설정 |
 | 경계 보안 | CORS origin 제한, API Gateway throttling, Amplify WAF |
 | 감사·탐지 | CloudTrail, GuardDuty, Security Hub, Macie |
 | AI 서비스 정책 | AWS AI Services opt-out 정책 적용 |
-| 방언 처리 | 강원 방언팩 기반 로컬 RAG와 Nova Lite 표준화 보조 단계 |
 
 ---
 
