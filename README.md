@@ -119,8 +119,6 @@ flowchart LR
   Lambda --> SourceData
 ```
 
-![문진톡톡 전체 서비스 아키텍처](docs/architecture-diagrams/overall-service-architecture.png)
-
 ### 기술 스택
 
 | 영역 | 기술 |

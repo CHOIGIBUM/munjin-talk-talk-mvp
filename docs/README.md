@@ -48,14 +48,11 @@
 
 | 구조도 | 설명 |
 | --- | --- |
-| [전체 서비스 아키텍처](architecture-diagrams/overall-service-architecture.png) | 프론트엔드, API Gateway, Lambda, LangGraph, Bedrock, Transcribe, DynamoDB, S3의 전체 연결 |
 | [환자 문진 UX 흐름](architecture-diagrams/patient-questionnaire-flow.png) | 접수부터 태블릿 문진 완료, 대기열 복귀까지의 사용자 흐름 |
 | [백엔드 비동기 처리 흐름](architecture-diagrams/backend-async-flow.png) | `/process-answers` 저장 후 Lambda async 분석으로 분리되는 구조 |
 | [LangGraph AI 파이프라인](architecture-diagrams/langgraph-pipeline.png) | RAG, 표준화, 의미 추출, schema 검증, IR, 원페이퍼 생성 흐름 |
 | [Hybrid IR 표준 증상 매칭](architecture-diagrams/hybrid-ir-flow.png) | BM25, Titan Vector, label signal, RRF, linker validator의 표준 증상 연결 |
 | [데이터 저장과 보안 처리](architecture-diagrams/data-security-flow.png) | 음성 미저장, 가명처리, S3 redacted artifact, DynamoDB pointer, AWS 보안 설정 |
-
-![문진톡톡 전체 서비스 아키텍처](architecture-diagrams/overall-service-architecture.png)
 
 ---
 
