@@ -202,6 +202,34 @@ IR은 내부 배포 환경의 비공개 런타임 데이터(`diseases_cleaned.js
 7. Titan 의미 신호와 BM25/label 근거를 함께 만족한 후보만 `matched_slots`로 확정
 8. 운영 산출물에는 임의 점수·전체 후보 목록·prompt 전문을 저장하지 않고, 원페이퍼에는 “매칭됨/우선 확인”처럼 의료진이 해석 가능한 상태만 표시
 
+### Hybrid IR 처리 흐름
+
+```mermaid
+flowchart TB
+  Span["LLM symptom span<br/>source_quote · normalized_text · name"]
+  Query["IR query<br/>normalized_text + name"]
+  BM25["BM25 후보<br/>표준 증상 문서와 키워드 일치"]
+  Titan["Titan vector 후보<br/>환자 표현과 표준 증상 문서 의미 유사도"]
+  Label["Label bridge 후보<br/>표준 증상명에 직접 가까운 표현"]
+  Merge["후보 통합<br/>BM25 ∪ Titan ∪ label"]
+  Rank["내부 rank score 재정렬<br/>운영 UI에는 점수 미노출"]
+  Gate{"Hybrid gate 통과?"}
+  Matched["matched_slots<br/>원페이퍼에 매칭됨으로 표시"]
+  Unmatched["unmatched_spans<br/>문진 맥락으로 보존"]
+
+  Span --> Query
+  Query --> BM25
+  Query --> Titan
+  Query --> Label
+  BM25 --> Merge
+  Titan --> Merge
+  Label --> Merge
+  Merge --> Rank
+  Rank --> Gate
+  Gate -- "Titan 의미 신호 + BM25/label 근거 있음" --> Matched
+  Gate -- "근거 부족" --> Unmatched
+```
+
 ### 예시
 
 | 단계 | 예시 |
