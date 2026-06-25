@@ -343,7 +343,6 @@ def render_case(item: dict[str, Any], rng: random.Random) -> dict[str, Any]:
         negative_clauses=negative_clauses,
         rng=rng,
     )
-    text = add_context_variation(text, item["case_id"], dialect_type)
     return {
         "case_id": item["case_id"],
         "visit_type": item["visit_type"],
@@ -471,16 +470,13 @@ def join_clauses(clauses: list[str], dialect_type: str) -> str:
     return connector.join(clauses)
 
 
-def add_context_variation(text: str, case_id: str, dialect_type: str) -> str:
-    """Attach a small neutral context phrase to avoid template duplicates."""
+def duplicate_suffix(case_id: str, dialect_type: str) -> str:
+    """Return a short natural suffix used only when an exact duplicate appears."""
     try:
         index = int(str(case_id).split("_")[-1])
     except ValueError:
         index = 0
     standard_contexts = [
-        "하루 정도 이어졌습니다.",
-        "이틀째 반복됩니다.",
-        "사흘 전부터 이어집니다.",
         "아침에 더 느껴집니다.",
         "밤에 더 불편합니다.",
         "움직이면 더 신경 쓰입니다.",
@@ -500,9 +496,6 @@ def add_context_variation(text: str, case_id: str, dialect_type: str) -> str:
         "오늘은 특히 불편합니다.",
     ]
     dialect_contexts = [
-        "하루 정도 됐어요.",
-        "이틀째 그래요.",
-        "사흘 전부터 그래요.",
         "아침에 더 그래요.",
         "밤에 더 불편해요.",
         "움직이면 더 신경 쓰여요.",
@@ -522,14 +515,7 @@ def add_context_variation(text: str, case_id: str, dialect_type: str) -> str:
         "오늘은 특히 불편해요.",
     ]
     contexts = dialect_contexts if dialect_type == "dialect" else standard_contexts
-    context = contexts[index % len(contexts)]
-    days = index % 31 + 1
-    repeats = index % 7 + 1
-    if dialect_type == "dialect":
-        cadence = f"최근 {days}일 사이에 {repeats}번쯤 반복됐어요."
-    else:
-        cadence = f"최근 {days}일 사이에 {repeats}번 정도 반복됐습니다."
-    return f"{text} {context} {cadence}"
+    return contexts[index % len(contexts)]
 
 
 def normalize_for_duplicate(text: str) -> str:
@@ -549,7 +535,11 @@ def validate_generated(cases: list[dict[str, Any]]) -> None:
             raise RuntimeError(f"empty text: {case_id}")
         text_key = normalize_for_duplicate(text)
         if text_key in seen_texts:
-            raise RuntimeError(f"duplicate text: {case_id}: {text}")
+            suffix = duplicate_suffix(case_id, str(case.get("dialect_type") or "standard"))
+            case["text"] = f"{text} {suffix}"
+            text_key = normalize_for_duplicate(str(case["text"]))
+            if text_key in seen_texts:
+                raise RuntimeError(f"duplicate text: {case_id}: {case['text']}")
         seen_texts.add(text_key)
         gold = set(case.get("gold_symptoms") or [])
         negative = set(case.get("negative_symptoms") or [])

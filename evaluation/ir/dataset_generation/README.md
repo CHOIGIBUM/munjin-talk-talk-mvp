@@ -29,7 +29,9 @@ Controlled dimensions:
 - multi-symptom cases: 400
 - negative/absent symptom context: 250
 
-The renderer also adds neutral time/frequency context to reduce duplicate templates.
+The renderer keeps the main utterance symptom-focused.  If an exact duplicate
+text is detected, the validator appends a short natural context phrase to that
+duplicate only.
 
 ## Generate
 
