@@ -162,6 +162,12 @@ export default function PatientFlow({
     setStep(initialVisitType && skipVisitTypeWhenPreset ? STEPS.Q_VOICE : STEPS.VISIT_TYPE)
   }, [initialVisitType, skipVisitTypeWhenPreset])
 
+  const handleReturnToConsent = useCallback(() => {
+    setConsentRejected(false)
+    setConsentError('')
+    setIntakeStopped(false)
+  }, [])
+
   const handleStaffCall = useCallback(() => {
     notifyStaff({
       sessionId: activeSessionId,
@@ -480,6 +486,8 @@ export default function PatientFlow({
         <ManualIntakeScreen
           patient={displayPatient}
           visitType={visitType}
+          onReturnToConsent={handleReturnToConsent}
+          onExitToQueue={onExitToQueue}
         />
       )
     }

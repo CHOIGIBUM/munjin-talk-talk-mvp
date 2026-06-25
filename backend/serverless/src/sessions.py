@@ -207,7 +207,9 @@ def save_patient_consent(session_id: str, body: dict[str, Any]) -> dict[str, Any
     updates = {
         "privacy_consent": consent_summary(consent),
     }
-    if not accepted:
+    if accepted and session.get("status") == "consent_rejected":
+        updates["status"] = "waiting_tablet"
+    elif not accepted:
         updates["status"] = "consent_rejected"
     return update_session(session_id, updates)
 

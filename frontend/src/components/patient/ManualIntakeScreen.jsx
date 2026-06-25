@@ -15,7 +15,7 @@ const ManualIntakeIcon = () => (
 
 // 개인정보 동의를 거부한 경우 음성 문진을 시작하지 않고 수기 문진 전환을 안내합니다.
 // 이 화면은 환자에게 불안감을 주지 않도록 "직원이 도와준다"는 다음 행동만 크게 보여줍니다.
-export default function ManualIntakeScreen({ patient, visitType }) {
+export default function ManualIntakeScreen({ patient, visitType, onReturnToConsent, onExitToQueue }) {
   return (
     <>
       <ScreenHeader
@@ -41,6 +41,17 @@ export default function ManualIntakeScreen({ patient, visitType }) {
           <span>직원 확인 대기 중</span>
         </div>
       </main>
+
+      <footer className="screen-footer manual-intake-actions">
+        {onExitToQueue && (
+          <button type="button" className="btn-secondary manual-intake-exit" onClick={onExitToQueue}>
+            환자 선택 화면
+          </button>
+        )}
+        <button type="button" className="btn-primary manual-intake-return" onClick={onReturnToConsent}>
+          동의 화면으로 돌아가기
+        </button>
+      </footer>
     </>
   )
 }

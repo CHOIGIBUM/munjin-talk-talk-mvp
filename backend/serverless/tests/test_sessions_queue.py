@@ -44,6 +44,13 @@ class FakeTable:
         if UpdateExpression.startswith("ADD queue_counter"):
             item["queue_counter"] = int(item.get("queue_counter") or 0) + int(ExpressionAttributeValues[":one"])
             return {"Attributes": {"queue_counter": item["queue_counter"]}}
+        if UpdateExpression.startswith("SET "):
+            names = _kwargs.get("ExpressionAttributeNames") or {}
+            assignments = UpdateExpression.removeprefix("SET ").split(", ")
+            for assignment in assignments:
+                name_key, value_key = [part.strip() for part in assignment.split(" = ", 1)]
+                item[names.get(name_key, name_key)] = ExpressionAttributeValues[value_key]
+            return {"Attributes": dict(item)}
         raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
 
     def scan(self, **_kwargs):
@@ -114,3 +121,14 @@ def test_delete_session_removes_user_session_but_not_meta_counter():
     assert sessions.delete_session("s_old") is True
     assert "s_old" not in fake.items
     assert sessions.delete_session(sessions.QUEUE_COUNTER_SESSION_ID) is False
+
+
+def test_accepting_after_rejection_reopens_tablet_flow():
+    fake = FakeTable()
+    sessions = import_sessions_with_fake_table(fake)
+    fake.items["s_old"]["status"] = "consent_rejected"
+
+    updated = sessions.save_patient_consent("s_old", {"accepted": True, "version": "v-test"})
+
+    assert updated["privacy_consent"] == {"accepted": True}
+    assert updated["status"] == "waiting_tablet"

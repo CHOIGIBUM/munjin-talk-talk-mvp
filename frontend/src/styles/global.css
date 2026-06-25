@@ -1438,6 +1438,41 @@ body {
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
+.manual-intake-actions {
+  justify-content: flex-end;
+}
+
+.manual-intake-exit,
+.manual-intake-return {
+  min-height: 56px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 1000;
+}
+
+.manual-intake-exit {
+  border: 1px solid #bfdbfe;
+  background: white;
+  color: var(--navy);
+}
+
+.manual-intake-return {
+  min-width: 210px;
+}
+
+@media (max-width: 700px) {
+  .manual-intake-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .manual-intake-return {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+}
+
 /* 환자 태블릿 진입 전에 띄우는 앱형 개인정보 동의 팝업입니다. */
 .privacy-consent-backdrop {
   position: fixed;
