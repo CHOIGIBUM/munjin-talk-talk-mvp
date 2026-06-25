@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import logoUrl from '../../assets/munjin-logo.svg'
 import { getDoctorQueue } from '../../services/api.js'
 import { sessionUrl } from '../../services/api/client.js'
+import { sortTabletQueue } from '../../services/queueOrder.js'
 import './PatientKioskView.css'
 
 const TABLET_QUEUE_STATUSES = new Set([
@@ -48,7 +49,7 @@ export default function PatientTabletQueueView() {
   }, [loadSessions])
 
   const waitingSessions = useMemo(
-    () => sessions.filter((session) => TABLET_QUEUE_STATUSES.has(session.status)),
+    () => sortTabletQueue(sessions.filter((session) => TABLET_QUEUE_STATUSES.has(session.status))),
     [sessions]
   )
 

@@ -9,6 +9,7 @@ import ReceptionView from './components/staff/ReceptionView.jsx'
 import RoleLoginModal from './components/auth/RoleLoginModal.jsx'
 import { getDoctorQueue } from './services/api.js'
 import { getPatientToken, sessionUrl } from './services/api/client.js'
+import { sortDoctorQueue } from './services/queueOrder.js'
 
 function sessionIdFromPath(path) {
   const match = path.match(/^\/(?:patient|guide)\/([^/]+)/)
@@ -59,10 +60,11 @@ export default function App() {
       }
     }
 
-    const doctor = sessions.find((session) => (
+    const orderedSessions = sortDoctorQueue(sessions)
+    const doctor = orderedSessions.find((session) => (
       ['needs_priority', 'waiting_doctor', 'completed', 'analysis_pending', 'analysis_failed', 'reviewed'].includes(session.status)
     ))
-      || sessions[0]
+      || orderedSessions[0]
     return {
       patient: '/patient',
       doctor: doctor ? `/doctor/${doctor.sessionId}` : null,

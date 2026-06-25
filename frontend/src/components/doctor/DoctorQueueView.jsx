@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getDoctorQueue } from '../../services/api.js'
+import { sortDoctorQueue } from '../../services/queueOrder.js'
 import './DoctorQueueView.css'
 
 // 의사 대기열 화면입니다.
@@ -37,23 +38,7 @@ export default function DoctorQueueView() {
   }, [])
 
   const sorted = useMemo(() => {
-    const priority = {
-      needs_priority: 0,
-      waiting_doctor: 1,
-      completed: 1,
-      analysis_failed: 2,
-      analysis_pending: 3,
-      in_progress: 4,
-      staff_help: 5,
-      waiting_tablet: 6,
-      reviewed: 7,
-    }
-    return [...sessions].sort((a, b) => {
-      const pa = priority[a.status] ?? 9
-      const pb = priority[b.status] ?? 9
-      if (pa !== pb) return pa - pb
-      return (a.queueNumber || 0) - (b.queueNumber || 0)
-    })
+    return sortDoctorQueue(sessions)
   }, [sessions])
 
   return (
@@ -67,7 +52,7 @@ export default function DoctorQueueView() {
       </header>
 
       <div className="dq-board">
-        {sorted.map((session) => {
+        {sorted.map((session, index) => {
           const isGenerating = session.status === 'analysis_pending'
             || ['pending', 'running'].includes(session.analysisStatus || session.analysis_status || '')
           const openGeneratingNotice = () => {
@@ -79,7 +64,9 @@ export default function DoctorQueueView() {
 
           return (
             <article key={session.sessionId} className={`dq-row ${session.risk === 'high' ? 'risk' : ''}`}>
-              <div className="dq-num">{session.queueNumber}</div>
+              <div className="dq-num" title={session.queueNumber ? `접수 번호 ${session.queueNumber}` : '현재 대기 순서'}>
+                {index + 1}
+              </div>
               <div className="dq-main">
                 <div className="dq-name">
                   <strong>{session.patient.name}</strong>
