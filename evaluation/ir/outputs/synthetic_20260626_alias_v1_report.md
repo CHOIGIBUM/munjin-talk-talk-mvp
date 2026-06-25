@@ -1,5 +1,10 @@
 # Synthetic IR Alias V1 Test Report - 2026-06-26
 
+> Audit warning: this report is a development ablation, not a clean blind
+> benchmark. Alias and few-shot content overlap heavily with the synthetic
+> generator templates, and the locked holdout was inspected during failure
+> analysis. See `synthetic_20260626_alias_v1_audit.md`.
+
 ## Change Summary
 
 - Added domain-managed symptom alias data at `backend/serverless/src/data/symptom_aliases/respiratory.json`.
