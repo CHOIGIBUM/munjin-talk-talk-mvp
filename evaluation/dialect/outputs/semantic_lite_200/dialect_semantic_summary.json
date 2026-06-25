@@ -1,0 +1,18 @@
+{
+  "case_count": 200,
+  "model_id": "apac.amazon.nova-lite-v1:0",
+  "judge_model_id": "apac.amazon.nova-lite-v1:0",
+  "semantic_success_rate": 0.9,
+  "same_meaning_rate": 0.925,
+  "standard_korean_rate": 0.99,
+  "no_added_fact_rate": 0.965,
+  "no_omitted_fact_rate": 0.93,
+  "avg_rag_hint_count": 0.275,
+  "failure_type_counts": {
+    "added_fact": 7,
+    "meaning_mismatch": 1,
+    "not_standard_korean": 2,
+    "ok": 180,
+    "omitted_fact": 10
+  }
+}
