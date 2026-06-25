@@ -7,7 +7,7 @@
 
 어르신의 말은 쉽게, 의료진의 확인은 빠르게.
 
-고령 환자가 말로 답한 문진을 구조화, 표준 증상 매칭, 검증을 거쳐 진료 전에는 *의료진용 원페이퍼*로, 진료 후에는 *환자용 안내문*으로 바꿔주는 AI 문진 보조 MVP
+고령 환자가 말로 답한 문진을 구조화, 표준 증상 매칭, 검증을 거쳐 진료 전에는 *의료진용 원페이퍼*로,<br> 진료 후에는 *환자용 안내문*으로 바꿔주는 AI 문진 보조 MVP
 
 ![Status](https://img.shields.io/badge/status-MVP-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018%20%2B%20Vite-61dafb)
