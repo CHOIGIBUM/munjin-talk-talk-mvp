@@ -285,6 +285,162 @@
           }
         ]
       }
+    },
+    {
+      "title": "palpitation, tachycardia, and irregular rhythm keep distinct hints",
+      "visit_type": "initial",
+      "question_id": "Q1",
+      "question_type": "chief_complaint",
+      "tagged_spans": [
+        {
+          "source_quote": "심장이 쿵쿵 뛰는 느낌입니다",
+          "type": "symptom",
+          "slot_ref": "other",
+          "name": "심장 쿵쿵",
+          "normalized_text": "심장이 쿵쿵 뛰는 느낌입니다.",
+          "status": "있음",
+          "alert": false,
+          "explain": "현재 증상입니다."
+        },
+        {
+          "source_quote": "맥이 너무 빨리 뜁니다",
+          "type": "symptom",
+          "slot_ref": "other",
+          "name": "맥 빠름",
+          "normalized_text": "맥이 너무 빨리 뜁니다.",
+          "status": "있음",
+          "alert": false,
+          "explain": "현재 증상입니다."
+        },
+        {
+          "source_quote": "맥이 들쑥날쑥합니다",
+          "type": "symptom",
+          "slot_ref": "other",
+          "name": "맥 불규칙",
+          "normalized_text": "맥이 들쑥날쑥합니다.",
+          "status": "있음",
+          "alert": false,
+          "explain": "현재 증상입니다."
+        }
+      ],
+      "expected_json": {
+        "spans": [
+          {
+            "source_quote": "심장이 쿵쿵 뛰는 느낌입니다",
+            "type": "symptom",
+            "slot_ref": "other",
+            "name": "가슴 두근거림",
+            "normalized_text": "심장이 쿵쿵 뛰는 느낌입니다.",
+            "status": "있음",
+            "alert": false,
+            "explain": "쿵쿵 뛰는 느낌은 가슴 두근거림 후보로 검색되도록 합니다."
+          },
+          {
+            "source_quote": "맥이 너무 빨리 뜁니다",
+            "type": "symptom",
+            "slot_ref": "other",
+            "name": "빈맥",
+            "normalized_text": "맥이 너무 빨리 뜁니다.",
+            "status": "있음",
+            "alert": false,
+            "explain": "맥이 빠른 표현은 빈맥 후보로 검색되도록 합니다."
+          },
+          {
+            "source_quote": "맥이 들쑥날쑥합니다",
+            "type": "symptom",
+            "slot_ref": "other",
+            "name": "부정맥",
+            "normalized_text": "맥이 들쑥날쑥합니다.",
+            "status": "있음",
+            "alert": false,
+            "explain": "맥이 불규칙한 표현은 부정맥 후보로 검색되도록 합니다."
+          }
+        ]
+      }
+    },
+    {
+      "title": "foam sputum and wheezing preserve specific respiratory character",
+      "visit_type": "initial",
+      "question_id": "Q1",
+      "question_type": "chief_complaint",
+      "tagged_spans": [
+        {
+          "source_quote": "가래에 거품이 보입니다",
+          "type": "symptom",
+          "slot_ref": "other",
+          "name": "가래",
+          "normalized_text": "가래에 거품이 보입니다.",
+          "status": "있음",
+          "alert": false,
+          "explain": "현재 증상입니다."
+        },
+        {
+          "source_quote": "숨쉴 때 쌕쌕 소리가 납니다",
+          "type": "symptom",
+          "slot_ref": "other",
+          "name": "쌕쌕거림",
+          "normalized_text": "숨쉴 때 쌕쌕 소리가 납니다.",
+          "status": "있음",
+          "alert": false,
+          "explain": "현재 증상입니다."
+        }
+      ],
+      "expected_json": {
+        "spans": [
+          {
+            "source_quote": "가래에 거품이 보입니다",
+            "type": "symptom",
+            "slot_ref": "sputum",
+            "name": "거품이 섞인 가래",
+            "normalized_text": "가래에 거품이 보입니다.",
+            "status": "있음",
+            "alert": false,
+            "explain": "거품이라는 가래 성상을 검색 힌트에 보존합니다."
+          },
+          {
+            "source_quote": "숨쉴 때 쌕쌕 소리가 납니다",
+            "type": "symptom",
+            "slot_ref": "wheezing",
+            "name": "천명음",
+            "normalized_text": "숨쉴 때 쌕쌕 소리가 납니다.",
+            "status": "있음",
+            "alert": false,
+            "explain": "쌕쌕 소리는 천명음 후보로 검색되도록 합니다."
+          }
+        ]
+      }
+    },
+    {
+      "title": "chest pressure keeps pressure instead of broad chest discomfort",
+      "visit_type": "initial",
+      "question_id": "Q1",
+      "question_type": "chief_complaint",
+      "tagged_spans": [
+        {
+          "source_quote": "가슴을 꽉 누르는 느낌입니다",
+          "type": "symptom",
+          "slot_ref": "other",
+          "name": "가슴 답답",
+          "normalized_text": "가슴을 꽉 누르는 느낌입니다.",
+          "status": "있음",
+          "alert": true,
+          "explain": "현재 증상입니다."
+        }
+      ],
+      "expected_json": {
+        "spans": [
+          {
+            "source_quote": "가슴을 꽉 누르는 느낌입니다",
+            "type": "symptom",
+            "slot_ref": "chest_pressure",
+            "name": "흉부압박감",
+            "normalized_text": "가슴을 꽉 누르는 느낌입니다.",
+            "status": "있음",
+            "alert": true,
+            "explain": "누르는 느낌은 넓은 가슴 답답보다 흉부압박감 후보로 검색되도록 합니다."
+          }
+        ]
+      }
     }
   ]
 }
