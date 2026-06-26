@@ -54,8 +54,19 @@ def validate_and_save(body: dict[str, Any]):
     matched_slots = ensure_safety_matched_slot(matched_slots, safety_flag)
 
     answers = load_answers(session)
+    existing_answer = answers.get(question_id) if isinstance(answers.get(question_id), dict) else {}
+    original_text = preserved_original_answer_text(
+        existing_answer,
+        transcript,
+        body.get("dialect_normalization") or {},
+    )
+    analysis_transcript = clean_raw_answer_text(transcript)
     answers[question_id] = {
-        "text": transcript,
+        "text": original_text,
+        "raw_text": original_text,
+        "analysis_transcript": "" if analysis_transcript == original_text else analysis_transcript,
+        "question_type": body.get("question_type") or existing_answer.get("question_type") or "",
+        "question_text": body.get("question_text") or existing_answer.get("question_text") or "",
         "dialect_normalization": body.get("dialect_normalization") or {},
         "spans": spans,
         "matched_slots": matched_slots,
@@ -120,6 +131,33 @@ def next_session_status(session: dict[str, Any], question_id: str, safety_flag: 
 def scan_safety(transcript: str, matched_slots: list[dict[str, Any]]):
     """위험 표현은 LLM이 아니라 deterministic rule로 재확인합니다."""
     return find_safety_flag(transcript, matched_slots)
+
+
+def preserved_original_answer_text(
+    existing_answer: dict[str, Any] | None,
+    transcript: str,
+    dialect_normalization: dict[str, Any] | None = None,
+) -> str:
+    """Keep the patient-confirmed raw text separate from LLM analysis text."""
+    existing = existing_answer if isinstance(existing_answer, dict) else {}
+    dialect = dialect_normalization if isinstance(dialect_normalization, dict) else {}
+    for value in [
+        existing.get("raw_text"),
+        existing.get("original_text"),
+        dialect.get("original_text"),
+        existing.get("text"),
+        existing.get("transcript"),
+        transcript,
+    ]:
+        cleaned = clean_raw_answer_text(value)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def clean_raw_answer_text(value: Any) -> str:
+    """Normalize raw answer whitespace without trimming sentence punctuation."""
+    return " ".join(str(value or "").split()).strip()
 
 
 def ensure_safety_matched_slot(matched_slots: list[dict[str, Any]], safety_flag: dict[str, Any] | None) -> list[dict[str, Any]]:

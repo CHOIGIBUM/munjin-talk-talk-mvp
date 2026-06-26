@@ -330,7 +330,15 @@ function getResponseText(responses, qid) {
   const payload = responses?.[qid]
   if (!payload) return ''
   if (typeof payload === 'string') return payload
-  return payload.text || payload.raw_transcript || ''
+  return firstText([
+    payload.raw_text,
+    payload.original_text,
+    payload.dialect_normalization?.original_text,
+    payload.text,
+    payload.transcript,
+    payload.raw_transcript,
+    payload.result?.transcript,
+  ])
 }
 
 function normalizePatientQuestionnaire(responses = {}) {
@@ -375,6 +383,14 @@ function getStandardizedText(payload) {
     spanText ||
     ''
   )
+}
+
+function firstText(values) {
+  for (const value of values) {
+    const text = cleanText(value)
+    if (text) return text
+  }
+  return ''
 }
 
 function normalizeVisitType(value) {

@@ -846,6 +846,7 @@ def session_validation_save_node(state: AnswerPipelineState) -> dict[str, Any]:
             "session_id": state.get("session_id"),
             "question_id": state.get("question_id"),
             "question_type": state.get("question_type"),
+            "question_text": state.get("question_text"),
             "visit_type": state.get("visit_type"),
             "transcript": state.get("transcript"),
             "dialect_normalization": state.get("dialect_normalization") or {},

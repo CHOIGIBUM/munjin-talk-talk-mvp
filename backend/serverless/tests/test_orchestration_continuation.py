@@ -82,3 +82,27 @@ def test_run_queued_analysis_preserves_priority_status(monkeypatch):
     assert result["ok"] is True
     assert updates[-1]["status"] == "needs_priority"
     assert updates[-1]["analysis_status"] == "succeeded"
+
+
+def test_persist_pending_answers_keeps_patient_raw_text(monkeypatch):
+    saved = {}
+
+    monkeypatch.setattr(orchestration, "load_answers", lambda _session: {})
+    monkeypatch.setattr(orchestration, "save_answers", lambda _session, answers: saved.update(answers) or "key")
+
+    orchestration.persist_pending_answers(
+        {"session_id": "s-test"},
+        [
+            {
+                "question_id": "Q4",
+                "question_type": "patient_questions",
+                "question_text": "의사에게 묻고 싶은 점이 있으세요?",
+                "transcript": "따뜻한 물이랑 약 같이 먹어도 괜찮아?",
+            }
+        ],
+    )
+
+    assert saved["Q4"]["text"] == "따뜻한 물이랑 약 같이 먹어도 괜찮아?"
+    assert saved["Q4"]["raw_text"] == "따뜻한 물이랑 약 같이 먹어도 괜찮아?"
+    assert saved["Q4"]["analysis_transcript"] == ""
+    assert saved["Q4"]["question_type"] == "patient_questions"

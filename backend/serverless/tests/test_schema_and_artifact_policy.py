@@ -15,7 +15,7 @@ from unittest import TestCase
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from artifact_policy import sanitize_matched_slot  # noqa: E402
+from artifact_policy import sanitize_answers, sanitize_matched_slot  # noqa: E402
 from schemas.extraction import validate_extraction_payload  # noqa: E402
 
 
@@ -107,6 +107,25 @@ class ExtractionSchemaTest(TestCase):
 
 
 class ArtifactPolicyTest(TestCase):
+    def test_answers_keep_raw_text_as_display_text(self):
+        cleaned = sanitize_answers({
+            "Q4": {
+                "raw_text": "따뜻한 물이랑 약 같이 먹어도 괜찮아?",
+                "text": "진통제 처방을 요청하고 따뜻한 물과 약을 같이 먹어도 되는지 문의",
+                "analysis_transcript": "진통제 처방을 요청하고 따뜻한 물과 약을 같이 먹어도 되는지 문의",
+                "question_type": "patient_questions",
+                "confirmed": True,
+            }
+        })
+
+        self.assertEqual(cleaned["Q4"]["text"], "따뜻한 물이랑 약 같이 먹어도 괜찮아?")
+        self.assertEqual(cleaned["Q4"]["raw_text"], "따뜻한 물이랑 약 같이 먹어도 괜찮아?")
+        self.assertEqual(
+            cleaned["Q4"]["analysis_transcript"],
+            "진통제 처방을 요청하고 따뜻한 물과 약을 같이 먹어도 되는지 문의",
+        )
+        self.assertEqual(cleaned["Q4"]["question_type"], "patient_questions")
+
     def test_operational_symptom_slot_removes_numeric_scores_and_candidates(self):
         slot = {
             "slot_id": "cough",

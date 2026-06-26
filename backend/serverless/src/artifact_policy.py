@@ -47,8 +47,19 @@ def sanitize_answers(payload: Any) -> dict[str, Any]:
     for question_id, record in payload.items():
         if not isinstance(record, dict):
             continue
+        raw_text = clean_raw_text(
+            record.get("raw_text")
+            or record.get("original_text")
+            or record.get("text")
+            or record.get("transcript")
+            or ""
+        )
+        analysis_transcript = clean_raw_text(record.get("analysis_transcript") or "")
         item = {
-            "text": clean_quote(record.get("text") or record.get("transcript") or ""),
+            "text": raw_text,
+            "raw_text": raw_text,
+            "question_type": clean_quote(record.get("question_type") or record.get("questionType") or ""),
+            "question_text": clean_quote(record.get("question_text") or record.get("questionText") or ""),
             "dialect_normalization": sanitize_dialect_normalization(
                 record.get("dialect_normalization") or {}
             ),
@@ -62,6 +73,8 @@ def sanitize_answers(payload: Any) -> dict[str, Any]:
             "extract_method": record.get("extract_method") or record.get("method") or "bedrock_nova",
             "confirmed": bool(record.get("confirmed", True)),
         }
+        if analysis_transcript and analysis_transcript != raw_text:
+            item["analysis_transcript"] = analysis_transcript
         out[str(question_id)] = item
     return out
 
@@ -139,8 +152,8 @@ def sanitize_dialect_normalization(payload: Any) -> dict[str, Any]:
         return {}
 
     return {
-        "original_text": clean_quote(payload.get("original_text") or ""),
-        "standardized_text": clean_quote(payload.get("standardized_text") or ""),
+        "original_text": clean_raw_text(payload.get("original_text") or ""),
+        "standardized_text": clean_raw_text(payload.get("standardized_text") or ""),
         "replacements": [
             keep_keys(
                 item,
@@ -356,6 +369,11 @@ def compact_trace_details(details: dict[str, Any]) -> dict[str, Any]:
 def keep_keys(source: dict[str, Any], keys: list[str]) -> dict[str, Any]:
     """허용 목록에 있는 key만 깊은 복사해서 반환합니다."""
     return {key: deepcopy(source[key]) for key in keys if key in source}
+
+
+def clean_raw_text(value: Any) -> str:
+    """Normalize whitespace without removing patient-entered punctuation."""
+    return " ".join(str(value or "").split()).strip()
 
 
 def normalize_scalar(value: Any) -> Any:

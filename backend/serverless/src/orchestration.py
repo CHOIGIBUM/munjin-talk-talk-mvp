@@ -116,7 +116,15 @@ def retry_answer_analysis(session_id: str):
         answer = answers_by_id.get(question_id)
         if not isinstance(answer, dict):
             continue
-        transcript = answer.get("text") or answer.get("transcript") or ""
+        dialect = answer.get("dialect_normalization") if isinstance(answer.get("dialect_normalization"), dict) else {}
+        transcript = (
+            answer.get("raw_text")
+            or answer.get("original_text")
+            or dialect.get("original_text")
+            or answer.get("text")
+            or answer.get("transcript")
+            or ""
+        )
         if not str(transcript).strip():
             continue
         normalized_answers.append({
@@ -408,8 +416,11 @@ def persist_pending_answers(session: dict[str, Any], answers: list[dict[str, Any
     stored = load_answers(session)
     for item in answers:
         question_id = item.get("question_id")
+        transcript = item.get("transcript") or ""
         stored[question_id] = {
-            "text": item.get("transcript") or "",
+            "text": transcript,
+            "raw_text": transcript,
+            "analysis_transcript": "",
             "question_type": item.get("question_type") or "",
             "question_text": item.get("question_text") or "",
             "analysis_status": "pending",
