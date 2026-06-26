@@ -80,14 +80,21 @@ export async function getDoctorQueue({ role = 'doctor' } = {}) {
 
 // 특정 sessionId의 세션 상세를 조회합니다.
 // 환자 화면에서는 URL/세션 저장소의 환자 토큰, 직원/의료진 화면에서는 역할 접근 코드를 사용합니다.
-export async function getIntakeSession(sessionId, { role = '', patientToken = '' } = {}) {
+export async function getIntakeSession(sessionId, { role = '', patientToken = '', throwOnError = false } = {}) {
   if (!sessionId) return null
   ensureApiConfigured()
 
   const res = await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
     headers: await apiHeaders({ role, sessionId, patientToken }),
   })
-  if (!res.ok) return null
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    if (!throwOnError) return null
+    const error = new Error(payload?.message || payload?.error || '문진 세션 조회 실패')
+    error.status = res.status
+    error.payload = payload
+    throw error
+  }
   const session = normalizeSession(await res.json())
   rememberPatientToken(session.sessionId, session.patientToken)
   return session
