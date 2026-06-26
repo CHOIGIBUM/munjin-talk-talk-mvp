@@ -20,6 +20,12 @@ backend/serverless/src/data/symptom_index.json
 backend/serverless/src/data/symptom_embeddings_*.json
 backend/serverless/src/data/ir_sources/**
 
+# Evaluation generated/private files
+evaluation/datasets/eval_cases.jsonl
+evaluation/outputs/
+evaluation/cache/
+evaluation/reports/generated/
+
 # Frontend generated files
 frontend/node_modules/
 frontend/dist/

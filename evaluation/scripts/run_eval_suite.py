@@ -21,8 +21,8 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PIPELINE_SCRIPT = PROJECT_ROOT / "evaluation" / "ir" / "run_pipeline_eval.py"
-IR_SCRIPT = PROJECT_ROOT / "evaluation" / "ir" / "run_ir_eval.py"
+PIPELINE_SCRIPT = PROJECT_ROOT / "evaluation" / "scripts" / "run_pipeline_eval.py"
+IR_SCRIPT = PROJECT_ROOT / "evaluation" / "scripts" / "run_ir_eval.py"
 
 
 def main() -> int:
@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--input", type=Path, required=True, help="text와 gold_symptoms를 담은 평가 JSONL 또는 JSON 배열")
-    parser.add_argument("--output-dir", type=Path, default=Path("evaluation/ir/outputs"), help="전체 평가 결과 저장 폴더")
+    parser.add_argument("--output-dir", type=Path, default=Path("evaluation/outputs"), help="전체 평가 결과 저장 폴더")
     parser.add_argument("--limit", type=int, default=0, help="앞에서 N개 case만 실행합니다. 0이면 전체 실행입니다.")
     parser.add_argument("--top-k", type=int, default=20, help="IR 후보 수입니다. 현재 MVP 기준은 20입니다.")
     parser.add_argument("--variants", default="G", help="평가 variant입니다. 기본값 G는 현재 MVP 채택안입니다.")

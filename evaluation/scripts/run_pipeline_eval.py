@@ -57,7 +57,7 @@ except ModuleNotFoundError as exc:
     raise SystemExit(
         "평가 실행에 필요한 Python 패키지가 없습니다.\n"
         "프로젝트 루트에서 다음 명령을 먼저 실행하세요.\n"
-        "  pip install -r evaluation\\ir\\requirements.txt\n"
+        "  pip install -r evaluation\\requirements.txt\n"
         f"누락 패키지: {exc.name}"
     ) from exc
 
@@ -153,7 +153,7 @@ def main() -> int:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="대사 + 골든 정답 기반 실제 문진 파이프라인 평가")
     parser.add_argument("--input", type=Path, required=True, help="평가 JSONL 또는 JSON 배열 파일")
-    parser.add_argument("--output-dir", type=Path, default=Path("evaluation/ir/outputs"), help="결과 저장 폴더")
+    parser.add_argument("--output-dir", type=Path, default=Path("evaluation/outputs/pipeline"), help="결과 저장 폴더")
     parser.add_argument("--limit", type=int, default=0, help="앞에서 N개 case만 실행. 0이면 전체 실행")
     return parser.parse_args()
 

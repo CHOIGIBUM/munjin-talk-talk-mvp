@@ -248,6 +248,26 @@ flowchart TB
 
 ---
 
+## 📊 성능 평가 요약
+
+문진톡톡은 해커톤 MVP의 목표 범위를 "고령 환자의 일반 호흡기 문진 발화를 의료진이 빠르게 확인할 수 있게 정리하는 것"으로 두고 평가했습니다. 평가는 실제 환자 데이터가 아니라 제품 시나리오를 반영한 합성 문진 발화로 진행했습니다.
+
+핵심 지표는 End-to-End F1입니다. 환자 발화에서 증상 표현을 추출하고, 원문 quote 검증과 Hybrid IR을 거쳐 표준 증상으로 연결된 최종 결과를 기준으로 계산했습니다.
+
+| 평가 대상 | 케이스 수 | 목적 | Precision | Recall | F1 |
+| --- | ---: | --- | ---: | ---: | ---: |
+| 일반 호흡기 focused benchmark | 150 | 제품 데모와 가장 가까운 일반 외래 호흡기 문진 | 0.8708 | 0.9172 | 0.8934 |
+| 전체 held-out benchmark | 500 | 중증 징후, confounder, 부정/호전 문맥까지 포함한 넓은 평가 | 0.7223 | 0.7859 | 0.7527 |
+| train/dev 개선 확인 | 100 | 프롬프트·IR 보정용 개발 데이터 | 1.0000 | 0.9369 | 0.9674 |
+
+일반 호흡기 150개에서는 F1 0.8934를 기록했습니다. 이 수치는 문진톡톡이 목표로 한 외래 호흡기 문진 상황에서 환자 발화를 표준 증상 후보와 비교적 안정적으로 연결한다는 의미입니다.
+
+반면 500개 held-out 평가는 더 어렵습니다. 흉부 불편감, 심혈관·신경·위장관 혼동 표현, 부정 표현, 호전 표현이 함께 들어 있어 F1이 0.7527로 내려갑니다. 이 차이는 문진톡톡이 "범용 자동 진단기"가 아니라 "진료 전 문진 정리 보조 도구"라는 점을 분명히 보여줍니다.
+
+자세한 평가 구조와 수치 해석은 [evaluation/README.md](evaluation/README.md)와 [evaluation/reports/performance_summary.md](evaluation/reports/performance_summary.md)에 정리했습니다.
+
+---
+
 ## 🔐 저장 최소화 원칙
 
 문진톡톡은 환자 식별 정보와 음성 원본을 오래 보관하지 않는 방향으로 설계했습니다. 서비스 실행에 꼭 필요한 상태값은 DynamoDB에 작게 남기고, 의료진 확인에 필요한 상세 산출물은 가명처리된 JSON만 S3에 분리 저장합니다. AWS 콘솔에서 적용한 WAF, CloudTrail, Macie 같은 운영 보안 설정은 아래 `운영 보안 수준`에 따로 정리했습니다.
@@ -324,7 +344,7 @@ munjin-talk-talk/
 │       ├── retrieval*.py         # Hybrid IR
 │       ├── schemas/              # Pydantic 스키마
 │       └── data/                 # 공개 도메인팩 · 질문셋 / 비공개 IR 데이터 배치 위치
-├── evaluation/            # IR 성능 평가 스크립트와 평가 입력 형식
+├── evaluation/            # 평가 스크립트, 샘플 데이터, 성능 요약
 └── docs/                  # 아키텍처 · 파이프라인 · 데이터 · 보안 문서
 ```
 
@@ -338,6 +358,8 @@ munjin-talk-talk/
 | [docs/LANGGRAPH_PIPELINE.md](docs/LANGGRAPH_PIPELINE.md) | Q1~Q4 답변 묶음이 거치는 LangGraph 분석 흐름 |
 | [docs/DATA_SCHEMA.md](docs/DATA_SCHEMA.md) | DynamoDB·S3·extraction·onepaper·guide JSON |
 | [docs/SECURITY_DATA_INVENTORY.md](docs/SECURITY_DATA_INVENTORY.md) | 필드별 보안 처리 기준 |
+| [evaluation/README.md](evaluation/README.md) | 평가 실행 구조·지표·공개/비공개 산출물 기준 |
+| [evaluation/reports/performance_summary.md](evaluation/reports/performance_summary.md) | 해커톤 발표용 성능 요약 |
 
 ---
 
