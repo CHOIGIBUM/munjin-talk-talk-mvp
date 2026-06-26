@@ -1433,6 +1433,7 @@ body {
   text-align: center;
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1486,9 +1487,12 @@ body {
 }
 
 .manual-intake-actions {
+  display: flex;
   justify-content: center;
+  align-items: center;
   gap: 14px;
-  padding: 14px 22px max(18px, env(safe-area-inset-bottom));
+  width: min(100%, 430px);
+  margin-top: 28px;
 }
 
 .manual-intake-exit,

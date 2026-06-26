@@ -40,18 +40,18 @@ export default function ManualIntakeScreen({ patient, visitType, onReturnToConse
           <span className="manual-intake-dot" />
           <span>직원 확인 대기 중</span>
         </div>
-      </main>
 
-      <footer className="screen-footer manual-intake-actions">
-        {onExitToQueue && (
-          <button type="button" className="btn-secondary manual-intake-exit" onClick={onExitToQueue}>
-            환자 선택 화면
+        <div className="manual-intake-actions">
+          {onExitToQueue && (
+            <button type="button" className="btn-secondary manual-intake-exit" onClick={onExitToQueue}>
+              환자 선택 화면
+            </button>
+          )}
+          <button type="button" className="btn-primary manual-intake-return" onClick={onReturnToConsent}>
+            동의 화면으로 돌아가기
           </button>
-        )}
-        <button type="button" className="btn-primary manual-intake-return" onClick={onReturnToConsent}>
-          동의 화면으로 돌아가기
-        </button>
-      </footer>
+        </div>
+      </main>
     </>
   )
 }
