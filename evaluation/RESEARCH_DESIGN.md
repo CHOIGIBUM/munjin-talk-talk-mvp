@@ -36,6 +36,18 @@ Do not use `test_1000` failures to revise aliases, few-shots, domain packs, prom
 
 ## Evaluation Layers
 
+### Experiment Tracks
+
+The project must keep these tracks separate.
+
+| Track | What It Runs | Calls Bedrock? | Purpose |
+| --- | --- | ---: | --- |
+| Offline IR/RAG sanity | `retrieve_alias_hints`, `retrieve_symptom_references`, BM25 symptom index | No | Check whether canonical symptom candidates can be retrieved before LLM extraction |
+| Pipeline integration | `run_answer_pipeline` / `run_answers_pipeline_sync` through LangGraph | Yes | Check actual dialect normalization, RAG prompt injection, Bedrock extraction, schema validation, IR linking, and persistence |
+| End-to-end app flow | Patient Q1-Q4 submit, async Lambda analysis, onepaper refresh | Yes | Check real product behavior and queue/readiness states |
+
+Current `evaluation/train_100_evaluation/evaluate_offline_ir.py` belongs only to the Offline IR/RAG sanity track. It does not measure final extraction F1 and it does not prove that the Bedrock pipeline succeeds.
+
 ### Candidate Retrieval
 
 Measures whether the correct canonical symptoms appear in deterministic candidate lists.
