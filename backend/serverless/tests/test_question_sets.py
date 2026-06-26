@@ -81,9 +81,10 @@ def install_handler_stubs():
 
     sessions = types.ModuleType("sessions")
     sessions.create_session = lambda _body: {}
+    sessions.doctor_queue_position = lambda _session_id: 0
     sessions.get_session = lambda _session_id: None
-    sessions.list_sessions = lambda: []
-    sessions.public_session = lambda session, include_artifacts=False: session
+    sessions.list_sessions = lambda **_kwargs: []
+    sessions.public_session = lambda session, **_kwargs: session
     sessions.save_patient_consent = lambda _session_id, _body: None
     sessions.update_session = lambda _session_id, _updates: None
     sessions.delete_session = lambda _session_id: False

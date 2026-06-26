@@ -114,6 +114,45 @@ def test_create_session_stores_question_set_id():
     assert sessions.public_session(created)["questionSetId"] == "default"
 
 
+def test_doctor_queue_position_matches_active_queue_order():
+    fake = FakeTable()
+    sessions = import_sessions_with_fake_table(fake)
+    fake.items.update({
+        "s_priority": {
+            "session_id": "s_priority",
+            "status": "needs_priority",
+            "queue_number": 50,
+            "created_at": "2026-06-01T00:02:00",
+            "patient": {"name": "우*선"},
+        },
+        "s_ready": {
+            "session_id": "s_ready",
+            "status": "waiting_doctor",
+            "queue_number": 20,
+            "created_at": "2026-06-01T00:03:00",
+            "patient": {"name": "대*기"},
+        },
+        "s_pending": {
+            "session_id": "s_pending",
+            "status": "analysis_pending",
+            "queue_number": 30,
+            "created_at": "2026-06-01T00:04:00",
+            "patient": {"name": "분*석"},
+        },
+        "s_archived": {
+            "session_id": "s_archived",
+            "status": "reviewed",
+            "queue_number": 1,
+            "created_at": "2026-06-01T00:05:00",
+            "patient": {"name": "완*료"},
+        },
+    })
+
+    assert sessions.doctor_queue_position("s_pending") == 3
+    assert sessions.doctor_queue_position("s_archived") == 0
+    assert sessions.public_session(fake.items["s_pending"], doctor_position=3)["doctorQueuePosition"] == 3
+
+
 def test_delete_session_removes_user_session_but_not_meta_counter():
     fake = FakeTable()
     sessions = import_sessions_with_fake_table(fake)

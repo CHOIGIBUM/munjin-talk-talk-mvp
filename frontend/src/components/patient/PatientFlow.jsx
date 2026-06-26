@@ -47,6 +47,7 @@ export default function PatientFlow({
   initialVisitType = null,
   patient = null,
   sessionId = null,
+  doctorQueuePosition = 0,
   questionSetId = 'default',
   frameVariant = 'preview',
   skipVisitTypeWhenPreset = true,
@@ -69,12 +70,17 @@ export default function PatientFlow({
   const [consentSaving, setConsentSaving] = useState(false)
   const [consentError, setConsentError] = useState('')
   const [questionSet, setQuestionSet] = useState(null)
+  const [doneQueuePosition, setDoneQueuePosition] = useState(Number(doctorQueuePosition || 0))
 
   const questionVisits = questionSet?.visits || QUESTIONS
   const questions = visitType ? (questionVisits[visitType] || QUESTIONS[visitType] || []) : []
   const currentQuestion = questions[questionIndex]
   const activeSessionId = sessionId || ''
   const displayPatient = patient || EMPTY_PATIENT
+
+  useEffect(() => {
+    setDoneQueuePosition(Number(doctorQueuePosition || 0))
+  }, [activeSessionId, doctorQueuePosition])
 
   const notifyStaff = useCallback((payload) => {
     try {
@@ -209,6 +215,7 @@ export default function PatientFlow({
     setTranscript('')
     setSafetyKeyword(null)
     setIntakeStopped(stopped)
+    setDoneQueuePosition(0)
     setStep(STEPS.DONE)
 
     processTranscriptsBatch({
@@ -216,6 +223,10 @@ export default function PatientFlow({
         questionSetId: questionSetId || 'default',
         visitType,
         answers: pendingAnswers.map(toBatchPayloadAnswer),
+      })
+      .then((payload) => {
+        const nextPosition = Number(payload?.doctorQueuePosition || payload?.doctor_queue_position || 0)
+        if (nextPosition > 0) setDoneQueuePosition(nextPosition)
       })
       .catch((err) => {
         console.error('batch intake processing failed:', err)
@@ -459,6 +470,7 @@ export default function PatientFlow({
             patient={displayPatient}
             visitType={visitType}
             stopped={intakeStopped}
+            queuePosition={doneQueuePosition}
             onExitToQueue={onExitToQueue}
           />
         )

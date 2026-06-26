@@ -39,6 +39,7 @@ export function normalizeSession(session) {
     ...session,
     sessionId: session.sessionId || session.session_id,
     queueNumber: Number(session.queueNumber || session.queue_number || 0),
+    doctorQueuePosition: Number(session.doctorQueuePosition || session.doctor_queue_position || 0),
     visitType: session.visitType || session.visit_type || 'initial',
     questionSetId: session.questionSetId || session.question_set_id || 'default',
     patientToken: session.patientToken || session.patient_token || '',

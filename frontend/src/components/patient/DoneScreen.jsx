@@ -18,9 +18,12 @@ export default function DoneScreen({
   patient,
   visitType,
   stopped = false,
+  queuePosition = 0,
   onExitToQueue,
 }) {
-  const statusText = stopped ? '직원 확인 대기' : '의료진 확인 대기'
+  const queueNumber = Number(queuePosition || 0)
+  const hasQueueNumber = Number.isFinite(queueNumber) && queueNumber > 0
+  const statusText = stopped ? '직원 확인 대기' : '순번 확인 중'
 
   return (
     <>
@@ -55,9 +58,15 @@ export default function DoneScreen({
         </p>
 
         <div className="queue-card queue-card-v4">
-          <span className="queue-label queue-label-large">현재 상태</span>
-          <span className="queue-number queue-number-large done-status-text">
-            {statusText}
+          <span className="queue-label queue-label-large">
+            {!stopped && hasQueueNumber ? '대기 순번' : '현재 상태'}
+          </span>
+          <span className={`queue-number queue-number-large ${!stopped && hasQueueNumber ? '' : 'done-status-text'}`}>
+            {!stopped && hasQueueNumber ? (
+              <>{queueNumber}<small>번</small></>
+            ) : (
+              statusText
+            )}
           </span>
         </div>
 

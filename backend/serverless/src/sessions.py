@@ -20,6 +20,18 @@ from settings import table
 from utils import ddb_value, mask_name, normalize_visit_type, now_iso
 
 QUEUE_COUNTER_SESSION_ID = "__meta_queue_counter__"
+DOCTOR_QUEUE_PRIORITY = {
+    "needs_priority": 0,
+    "waiting_doctor": 1,
+    "completed": 1,
+    "analysis_failed": 2,
+    "analysis_pending": 3,
+    "in_progress": 4,
+    "staff_help": 5,
+    "waiting_tablet": 6,
+    "reviewed": 7,
+}
+DOCTOR_QUEUE_ARCHIVE_STATUSES = {"reviewed"}
 
 
 def make_session_id() -> str:
@@ -59,6 +71,54 @@ def _scan_max_queue_number() -> int:
         return max(numbers or [0])
     except Exception:
         return 0
+
+
+def _visible_session_items() -> list[dict[str, Any]]:
+    """Return non-meta session rows for queue calculations and list APIs."""
+    res = table.scan(Limit=100)
+    return [
+        item for item in res.get("Items", [])
+        if not str(item.get("session_id") or "").startswith("__meta")
+    ]
+
+
+def _numeric_queue_number(session: dict[str, Any]) -> int:
+    try:
+        value = int(session.get("queue_number") or 0)
+        return value if value > 0 else 2**31
+    except Exception:
+        return 2**31
+
+
+def _doctor_queue_sort_key(session: dict[str, Any]) -> tuple[int, int, str, str]:
+    return (
+        DOCTOR_QUEUE_PRIORITY.get(session.get("status", "waiting_tablet"), 9),
+        _numeric_queue_number(session),
+        str(session.get("created_at") or ""),
+        str(session.get("session_id") or ""),
+    )
+
+
+def doctor_queue_position(session_id: str | None) -> int:
+    """Return the current visible position in the doctor queue for one session.
+
+    This mirrors the doctor queue ordering without exposing other patients to
+    the tablet screen. Archived reviewed sessions are excluded from the number.
+    """
+    if not session_id:
+        return 0
+    try:
+        active = [
+            item for item in _visible_session_items()
+            if item.get("status") not in DOCTOR_QUEUE_ARCHIVE_STATUSES
+        ]
+        active.sort(key=_doctor_queue_sort_key)
+        for index, item in enumerate(active, start=1):
+            if item.get("session_id") == session_id:
+                return index
+    except Exception:
+        return 0
+    return 0
 
 
 def next_queue_number() -> int:
@@ -218,6 +278,7 @@ def public_session(
     session: dict[str, Any],
     include_artifacts: bool = False,
     include_patient_token: bool = False,
+    doctor_position: int | None = None,
 ) -> dict[str, Any]:
     """프론트엔드가 쓰는 세션 응답을 최소 필드 중심으로 반환합니다.
 
@@ -237,6 +298,8 @@ def public_session(
         "sessionId": session.get("session_id"),
         "session_id": session.get("session_id"),
         "queueNumber": session.get("queue_number") or 0,
+        "doctorQueuePosition": int(doctor_position or 0),
+        "doctor_queue_position": int(doctor_position or 0),
         "status": session.get("status", "waiting_tablet"),
         "visitType": session.get("visit_type", "initial"),
         "visit_type": session.get("visit_type", "initial"),
@@ -277,10 +340,6 @@ def public_session(
 
 def list_sessions(include_patient_token: bool = False) -> list[dict[str, Any]]:
     """접수처와 의사 대기열에서 사용할 최신 세션 목록을 반환합니다."""
-    res = table.scan(Limit=100)
-    items = [
-        item for item in res.get("Items", [])
-        if not str(item.get("session_id") or "").startswith("__meta")
-    ]
+    items = _visible_session_items()
     items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return [public_session(item, include_patient_token=include_patient_token) for item in items]

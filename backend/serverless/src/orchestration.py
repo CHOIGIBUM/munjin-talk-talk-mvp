@@ -22,7 +22,7 @@ import boto3
 
 from artifact_store import load_answers, save_answers
 from pipeline_graph import PIPELINE_GRAPH, run_answer_pipeline
-from sessions import get_session, update_session
+from sessions import doctor_queue_position, get_session, update_session
 from utils import now_iso, response
 
 
@@ -83,6 +83,7 @@ def process_answers(body: dict[str, Any]):
             "analysis_updated_at": now_iso(),
         })
 
+    queue_position = doctor_queue_position(session_id)
     return {
         "accepted": True,
         "patient_complete": True,
@@ -90,6 +91,8 @@ def process_answers(body: dict[str, Any]):
         "onepager_ready": False,
         "analysis_status": "pending" if enqueued else "enqueue_failed",
         "analysis_queued": enqueued,
+        "doctorQueuePosition": queue_position,
+        "doctor_queue_position": queue_position,
         "enqueue_error": enqueue_error,
         "results": [],
         "failed_results": [],
@@ -147,10 +150,13 @@ def retry_answer_analysis(session_id: str):
         })
         return None, response(500, {"error": "failed_to_enqueue_analysis", "details": enqueue_error})
 
+    queue_position = doctor_queue_position(session_id)
     return {
         "accepted": True,
         "analysis_status": "pending",
         "analysis_queued": True,
+        "doctorQueuePosition": queue_position,
+        "doctor_queue_position": queue_position,
     }, None
 
 
