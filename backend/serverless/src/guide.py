@@ -125,32 +125,6 @@ Core rules:
   Do not duplicate it inside question answer items.
 - Return JSON only. The backend validates the output with a strict schema.
 
-Few-shot examples:
-
-Example 1
-Doctor answer: "혈압약은 계속 복용해도 되고, 감기약은 오늘 처방받은 약만 복용하도록 설명."
-JSON item:
-{{
-  "question": "혈압약과 감기약을 같이 먹어도 되는지 궁금함",
-  "answer_simple": [
-    "혈압약은 평소처럼 계속 드셔도 됩니다.",
-    "감기약은 오늘 처방받은 약만 드시는 것이 안전합니다."
-  ],
-  "tts_emphasis_words": ["혈압약", "오늘 처방받은 약"]
-}}
-
-Example 2
-Doctor answer: "영양제는 이번 처방약과 큰 상호작용은 없어 보이나, 추가 약이 생기면 재확인."
-JSON item:
-{{
-  "question": "영양제를 처방약과 같이 먹어도 되는지 궁금함",
-  "answer_simple": [
-    "현재 드시는 영양제는 이번 약과 같이 드셔도 됩니다.",
-    "나중에 다른 약이 추가되면 병원이나 약국에 다시 확인해 주세요."
-  ],
-  "tts_emphasis_words": ["다른 약", "다시 확인"]
-}}
-
 Required JSON schema:
 {{
   "items": [

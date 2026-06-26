@@ -33,7 +33,7 @@
 | `run_eval_suite.py` | 파이프라인 생성과 IR 평가를 이어서 실행 |
 | `run_baseline.ps1` | 데이터 검증, 빠른 IR baseline, 선택적 전체 baseline 실행 |
 | `validate_eval_data.py` | gold/negative 증상명과 방문유형-문항 조합 검증 |
-| `data/` | 공개 개발 데이터와 새 생성 데이터 위치 |
+| `data/` | 새 생성 데이터 위치. 과거 테스트 데이터는 제거됨 |
 | `dataset_generation/` | train 100, test 1000 생성 프레임워크 문서 |
 | `derived/` | train 100에서 파생한 alias/few-shot 제안 위치 |
 | `outputs/` | 로컬 평가 실행 결과. 기본적으로 Git에 올리지 않음 |
@@ -61,7 +61,6 @@
 
 | 데이터셋 | 용도 | alias/few-shot 반영 가능 여부 | 성능 보고 |
 | --- | --- | --- | --- |
-| `data/eval_cases.json` | 기존 100건 개발 데이터 보존 및 회귀 확인 | 가능 | 최종 성능으로 보고하지 않음 |
 | `data/generated/train_100/cases.json` | 새 v2 alias/few-shot 설계용 training set | 가능 | 최종 성능으로 보고하지 않음 |
 | `data/generated/test_1000/cases.locked.json` | 새 v2 평가용 locked test set | 불가 | 개별 실패를 열기 전 1회 성능 보고 가능 |
 

@@ -14,6 +14,9 @@
 
 | 산출물 | 위치 | 용도 |
 | --- | --- | --- |
+| dataset plan | `dataset_plan.json` | train/test 분포와 leakage 규칙 |
+| symptom expression policy | `symptom_expression_policy.json` | 직접 증상명 노출 허용/금지 기준 |
+| dialect policy | `dialect_policy_kangwon.json` | 강원도 구어체 생성 기준 |
 | train blueprint | `../data/generated/train_100/blueprint.json` | 100건 생성 설계 |
 | train cases | `../data/generated/train_100/cases.json` | alias/few-shot 개발 |
 | train manifest | `../data/generated/train_100/manifest.json` | 생성 조건과 검증 기록 |

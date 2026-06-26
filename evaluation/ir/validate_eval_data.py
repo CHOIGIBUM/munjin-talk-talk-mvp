@@ -17,7 +17,7 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_INPUT = PROJECT_ROOT / "evaluation" / "ir" / "data" / "eval_cases.json"
+DEFAULT_INPUT = PROJECT_ROOT / "evaluation" / "ir" / "data" / "generated" / "test_1000" / "cases.locked.json"
 SYMPTOM_INDEX_PATH = PROJECT_ROOT / "backend" / "serverless" / "src" / "data" / "symptom_index.json"
 QUESTION_SET_PATH = PROJECT_ROOT / "backend" / "serverless" / "src" / "data" / "question_sets" / "default.json"
 

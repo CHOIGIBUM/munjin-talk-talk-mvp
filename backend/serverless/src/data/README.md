@@ -2,27 +2,19 @@
 
 이 폴더는 문진톡톡 백엔드가 질문셋, 도메인 설정, 방언 RAG, 표준 증상 IR을 수행할 때 참조하는 데이터 위치입니다.
 
-공개 GitHub에는 코드와 공개 가능한 설정 파일만 포함합니다. 저작권 또는 이용 범위 검토가 필요한 원천 의료 백과 데이터, 그 파생 증상 인덱스, embedding cache는 공개 저장소에 포함하지 않습니다.
+현재 공개 브랜치의 도메인/few-shot 상태는 clean seed입니다. 과거 평가 과정에서 추가된 few-shot JSON, legacy few-shot text, 튜닝 alias는 제거했습니다. 새 alias/few-shot은 `evaluation/ir/data/generated/train_100/`에서 생성한 training data와 `evaluation/ir/derived/`의 제안 기록을 거쳐 다시 추가해야 합니다.
 
----
-
-## 1. 공개 저장소에 포함되는 파일
+## 공개 저장소에 포함되는 파일
 
 | 경로 | 용도 |
 | --- | --- |
-| `domain_packs/respiratory.json` | 호흡기 문진 도메인 설정, status enum 설명, 안전 플래그 기준 |
-| `domain_packs/respiratory_fewshot.txt` | 구버전 extraction few-shot 예시. 신규 관리는 `fewshots/` JSON을 사용 |
-| `fewshots/respiratory/*.json` | 도메인/단계별 few-shot 예시 |
+| `domain_packs/respiratory.json` | 최소 호흡기 도메인 seed. 튜닝 alias/few-shot 없음 |
 | `dialect_packs/dialect_kangwon.json` | 강원 방언 표현을 표준어 후보로 연결하는 RAG 참조 데이터 |
 | `dialect_packs/dialect_kangwon.csv` | 방언팩 원본 관리용 표 데이터 |
 | `question_sets/default.json` | 초진/재진 문진 질문 세트 |
 | `README.md` | 현재 문서 |
 
-이 파일들은 서비스 구조와 프롬프트/질문셋을 이해하는 데 필요하므로 공개합니다.
-
----
-
-## 2. 공개 저장소에 포함하지 않는 파일
+## 공개 저장소에 포함하지 않는 파일
 
 | 파일 | 용도 | 제외 이유 |
 | --- | --- | --- |
@@ -32,9 +24,7 @@
 
 이 세 파일이 없으면 백엔드 실행 자체는 가능하더라도 Hybrid IR 표준 증상 매칭은 정상 성능으로 동작하지 않습니다.
 
----
-
-## 3. 배포 전 배치해야 하는 구조
+## 배포 전 배치해야 하는 구조
 
 팀 내부 비공개 저장소나 로컬 보관 위치에서 아래 파일을 복사해 넣습니다.
 
@@ -57,9 +47,7 @@ Get-Item symptom_index.json
 Get-Item symptom_embeddings_amazon.titan-embed-text-v2_0_512.json
 ```
 
----
-
-## 4. Git 관리 기준
+## Git 관리 기준
 
 `.gitignore`에는 위 3개 비공개 런타임 데이터가 다시 올라가지 않도록 패턴이 등록되어 있어야 합니다.
 
@@ -78,19 +66,13 @@ git status --short --ignored -- backend/serverless/src/data
 
 비공개 파일이 `!!`로 보이면 Git에서 무시되고 있는 상태입니다. `??`로 보이면 `.gitignore`가 빠진 것이므로 커밋하면 안 됩니다.
 
----
-
-## 5. 서비스 내 참조 방식
+## 서비스 내 참조 방식
 
 - 질문 세트는 `question_sets.py`가 `question_sets/default.json`을 읽습니다.
 - 도메인 설정은 `domain_config.py`가 `domain_packs/`에서 읽습니다.
-- few-shot은 `fewshots.py`가 도메인팩의 `fewshot_sets` 또는 `fewshots/{fewshot_id}/`에서 읽습니다.
-- 구어체/사투리 확장은 현재 도메인팩의 `ir_text_aliases`, `symptom_rules`, dialect RAG 자료 안에서만 관리합니다.
-  - 별도 symptom alias bridge와 query expansion 파일은 clean 평가 재구축을 위해 제거했습니다.
-  - 도메인을 바꿀 때는 도메인팩과 함께 이 파일을 교체하거나 추가하면 됩니다.
-- 방언 RAG는 `dialect_rag.py`가 `dialect_packs/dialect_kangwon.json`을 읽습니다.
+- few-shot은 `fewshots.py`가 도메인팩 또는 `fewshots/{fewshot_id}/`에서 읽지만, 현재 공개 브랜치에는 few-shot 파일이 없습니다.
+- 구어체/사투리 확장은 dialect RAG 자료만 남아 있습니다.
+- 도메인팩의 `ir_text_aliases`는 clean seed에서 빈 배열입니다.
 - 표준 증상 IR은 `settings.py`/`data_sources.py`가 선택한 비공개 3개 파일을 읽습니다.
-  - 기본 호흡기 배포: `data/diseases_cleaned.json`, `data/symptom_index.json`, `data/symptom_embeddings_*.json`
-  - 도메인별 배포: `data/ir_sources/{ir_source_id}/diseases_cleaned.json`, `symptom_index.json`, `symptom_embeddings_*.json`
 
 따라서 공개 저장소 clone만으로는 코드 구조 검토와 기본 빌드는 가능하지만, 실제 운영 수준의 증상 매칭은 비공개 런타임 데이터 배치 후 확인해야 합니다.

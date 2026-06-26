@@ -1,24 +1,26 @@
 # IR Evaluation Data
 
-이 폴더는 문진톡톡 IR/파이프라인 평가에 사용하는 공개 개발 데이터와 새로 생성할 평가 데이터를 보관합니다. 실제 환자 데이터는 넣지 않습니다.
+이 폴더는 문진톡톡 IR/파이프라인 평가에 사용할 데이터를 보관하는 위치입니다. 현재 브랜치에서는 과거 테스트에 사용했던 데이터와 원본 백업을 모두 제거했습니다.
 
-## 현재 보존 파일
+## 현재 상태
 
-| 파일 | 설명 |
+| 경로 | 상태 |
 | --- | --- |
-| `eval_cases.json` | 기존 100건 공개 개발 데이터셋. 이미 실패 분석에 노출된 dev set입니다. |
-| `eval_cases.sample.jsonl` | 스키마 확인용 샘플 |
-| `raw/munjin_eval_100.json` | 기존 원본 합성 데이터 백업 |
+| `generated/` | 새 v2 생성 데이터가 들어갈 자리만 유지 |
+| `raw/` | 과거 원본 백업 제거 |
+| legacy manual dev files | 제거 |
 
 ## 새 v2 데이터 위치
 
-새 데이터는 아직 생성하지 않았습니다. 생성 후에는 아래 위치에 둡니다.
+새 데이터는 아래 위치에 생성합니다.
 
 | 경로 | 용도 |
 | --- | --- |
-| `generated/train_100/cases.json` | alias/few-shot/domain 보강에 사용할 100건 training set |
+| `generated/train_100/blueprint.json` | 100건 training set 설계 |
+| `generated/train_100/cases.json` | alias/few-shot/domain 보강에 사용할 training set |
 | `generated/train_100/manifest.json` | 생성 조건, 모델, seed, 검증 요약 |
-| `generated/test_1000/cases.locked.json` | 최종 평가 전까지 개별 실패를 보지 않는 1000건 locked test set |
+| `generated/test_1000/blueprint.json` | 1000건 locked test 설계 |
+| `generated/test_1000/cases.locked.json` | 최종 평가 전까지 개별 실패를 보지 않는 locked test set |
 | `generated/test_1000/manifest.json` | 생성 조건, 모델, seed, 검증 요약, lock 여부 |
 
 ## 데이터 분리 규칙

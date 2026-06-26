@@ -1056,40 +1056,6 @@ Critical rules:
 9. Do not choose a broad candidate when a more specific candidate in the list directly preserves the patient's modifier.
 10. Return strict JSON only.
 
-Few-shot examples:
-Input span_normalized_text: "다리가 부었습니다"
-Input symptom_hint: "다리 붓기"
-candidate_symptoms: [
-  {{"slot_id": "lower_extremity_edema", "name": "하지부종"}},
-  {{"slot_id": "pulmonary_edema", "name": "폐부종"}},
-  {{"slot_id": "pain", "name": "통증"}}
-]
-Output: {{"decision": "match", "selected_slot_ids": ["lower_extremity_edema"], "reason": "다리 붓기는 하지부종과 직접 대응합니다."}}
-
-Input span_normalized_text: "열은 다 내렸고 기침만 조금 남았습니다"
-Input symptom_hint: "열"
-candidate_symptoms: [
-  {{"slot_id": "fever", "name": "발열"}},
-  {{"slot_id": "cough", "name": "기침"}}
-]
-Output: {{"decision": "no_match", "selected_slot_ids": [], "reason": "발열은 호전되어 현재 활성 증상으로 보지 않습니다."}}
-
-Input span_normalized_text: "숨이 차지는 않고 코가 막힙니다"
-Input symptom_hint: "코막힘"
-candidate_symptoms: [
-  {{"slot_id": "dyspnea", "name": "호흡곤란"}},
-  {{"slot_id": "nasal_obstruction", "name": "코막힘"}}
-]
-Output: {{"decision": "match", "selected_slot_ids": ["nasal_obstruction"], "reason": "호흡곤란은 부정되었고 코막힘은 현재 증상입니다."}}
-
-Input span_normalized_text: "누런 가래가 나옵니다"
-Input symptom_hint: "누런 가래 또는 객담"
-candidate_symptoms: [
-  {{"slot_id": "sputum", "name": "가래"}},
-  {{"slot_id": "purulent_sputum", "name": "화농성 객담"}}
-]
-Output: {{"decision": "match", "selected_slot_ids": ["purulent_sputum"], "reason": "누런 가래는 일반 가래보다 화농성 객담에 더 구체적으로 대응합니다."}}
-
 Case:
 case_id: {case.get("case_id", "")}
 raw_text: {case_text(case)}
@@ -1121,15 +1087,6 @@ Rules:
 2. If the text says the symptom is absent, denied, resolved, improved, or only historical, do not select that symptom.
 3. Select zero or more names.
 4. Return strict JSON only.
-
-Few-shot examples:
-Input standard_text: "열은 다 내렸고 기침만 조금 남았습니다."
-candidate_names: ["발열", "기침", "두통"]
-Output: {{"selected_symptoms": ["기침"], "reason": "발열은 호전된 상태이고 현재 남은 증상은 기침입니다."}}
-
-Input standard_text: "숨이 차지는 않고 코가 막힙니다."
-candidate_names: ["호흡곤란", "코막힘"]
-Output: {{"selected_symptoms": ["코막힘"], "reason": "호흡곤란은 부정 표현이고 코막힘은 현재 증상입니다."}}
 
 Case:
 case_id: {case.get("case_id", "")}

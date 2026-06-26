@@ -1,21 +1,11 @@
 {
-  "version": "respiratory-v1",
-  "description": "문진톡톡 MVP에서 사용하는 호흡기계 문진 도메인 설정입니다. 환자 발화 추출은 LLM이 수행하고, 이 파일은 허용 slot, alias hint, 안전 플래그, 기본 질문 문구를 정의합니다.",
+  "version": "respiratory-clean-seed",
+  "description": "Clean seed respiratory domain pack. No tuned aliases or few-shot examples are included. New aliases/few-shots must be derived from the documented train_100 dataset.",
   "ir_source_id": "respiratory",
-  "fewshot_id": "respiratory",
-  "fewshot_sets": {
-    "extraction": "fewshots/respiratory/extraction.json",
-    "standardization": "fewshots/respiratory/standardization.json",
-    "semantic_unit": "fewshots/respiratory/semantic_unit.json",
-    "span_tagging": "fewshots/respiratory/span_tagging.json",
-    "symptom_hint": "fewshots/respiratory/symptom_hint.json",
-    "onepager_review": "fewshots/respiratory/onepager_review.json"
-  },
   "excluded_ir_symptom_names": ["사망", "무증상"],
   "alert_slot_ids": [
     "hemoptysis",
     "dyspnea",
-    "chest_discomfort",
     "chest_pain"
   ],
   "reviewer_domain_rules": {
@@ -23,23 +13,7 @@
     "rule6": "6. Do NOT add X-ray, TB, pneumonia, cancer, antibiotics, or lab/test tasks unless safety_flags, patient wording, or clinician agenda explicitly supports them.",
     "rule11_suffix": "Ordinary sore throat, nasal obstruction, cough, or runny nose must not be marked urgent."
   },
-  "agenda_category_rules": [
-    {
-      "category": "supplement_drug_interaction",
-      "all_of": [
-        ["홍삼", "영양제", "건강보조제", "보조제", "비타민", "오메가", "유산균", "한약"],
-        ["약", "처방", "감기약", "혈압약", "당뇨약"],
-        ["같이", "함께", "병용", "섞", "타먹", "먹어도", "복용"]
-      ]
-    },
-    {
-      "category": "drug_drug_interaction",
-      "all_of": [
-        ["약", "처방", "감기약", "혈압약", "당뇨약"],
-        ["같이", "함께", "병용", "섞", "타먹", "먹어도", "복용"]
-      ]
-    }
-  ],
+  "agenda_category_rules": [],
   "symptom_rules": [
     {"name": "객혈", "slot_id": "hemoptysis", "keywords": ["피", "피가", "객혈", "피섞", "피 섞", "묻어"], "alert": true},
     {"name": "기침", "slot_id": "cough", "keywords": ["기침", "콜록"], "alert": false},
@@ -47,77 +21,12 @@
     {"name": "코막힘", "slot_id": "nasal_obstruction", "keywords": ["코가 막", "코막", "맥혀", "막혀"], "alert": false},
     {"name": "콧물", "slot_id": "rhinorrhea", "keywords": ["콧물", "코물"], "alert": false},
     {"name": "발열", "slot_id": "fever", "keywords": ["열", "뜨거", "발열"], "alert": false},
-    {"name": "가래", "slot_id": "sputum", "keywords": ["가래", "痰"], "alert": false},
+    {"name": "가래", "slot_id": "sputum", "keywords": ["가래", "객담"], "alert": false},
     {"name": "호흡곤란", "slot_id": "dyspnea", "keywords": ["숨", "호흡", "답답"], "alert": true},
-    {"name": "가슴 답답", "slot_id": "chest_discomfort", "keywords": ["가슴 답답", "가슴이 답답", "가심", "답답허", "답답하"], "alert": true},
-    {"name": "흉통", "slot_id": "chest_pain", "keywords": ["가슴", "흉통", "결리", "찌르", "쑤시", "숨 쉴 때"], "alert": true},
-    {"name": "흉부압박감", "slot_id": "chest_pressure", "keywords": ["꽉 누르", "짓누르", "압박", "눌리는"], "alert": true},
-    {"name": "기운없음", "slot_id": "low_energy", "keywords": ["기운없", "기운 없", "힘이 없", "힘 없음", "힘이 안", "힘이 잘 안", "몸에 힘", "무기력"], "alert": false},
-    {"name": "어지러움", "slot_id": "dizziness", "keywords": ["어지러", "어질", "현기"], "alert": false},
-    {"name": "두통", "slot_id": "headache", "keywords": ["머리", "두통", "뒷골", "지끈"], "alert": false},
-    {"name": "방사통", "slot_id": "radiating_pain", "keywords": ["방사통", "뻗치", "찌르르", "어깨에서 팔", "팔로", "등으로"], "alert": false},
-    {"name": "복부팽만감", "slot_id": "abdominal_bloating", "keywords": ["배가 빵빵", "배 빵빵", "더부룩", "복부팽만", "배가 부풀"], "alert": false},
-    {"name": "복부 통증", "slot_id": "abdominal_pain", "keywords": ["배가 아프", "복통", "배 살살", "배가 살살"], "alert": false},
-    {"name": "하지부종", "slot_id": "leg_edema", "keywords": ["다리 붓", "다리 부기", "다리가 부", "종아리 붓"], "alert": false},
-    {"name": "사지 부종", "slot_id": "limb_edema", "keywords": ["손발 붓", "손발이 부", "팔다리 붓"], "alert": false},
-    {"name": "근육통", "slot_id": "myalgia", "keywords": ["몸살", "삭신", "쑤시", "결리", "근육통"], "alert": false},
-    {"name": "오한", "slot_id": "chills", "keywords": ["오한", "한기", "춥", "이불"], "alert": false},
-    {"name": "권태감", "slot_id": "malaise", "keywords": ["나른", "처짐", "권태", "축 처"], "alert": false},
-    {"name": "근력 약화", "slot_id": "muscle_weakness", "keywords": ["팔다리 힘", "힘이 들어가지", "힘이 안 들어"], "alert": false},
-    {"name": "발한", "slot_id": "sweating", "keywords": ["식은땀", "땀", "발한"], "alert": false},
-    {"name": "눈꼽", "slot_id": "eye_discharge", "keywords": ["눈곱", "눈꼽"], "alert": false},
-    {"name": "눈의 충혈", "slot_id": "eye_redness", "keywords": ["눈이 빨갛", "충혈"], "alert": false},
-    {"name": "삼키기 곤란", "slot_id": "dysphagia", "keywords": ["삼키기", "넘어가지", "목에 걸리"], "alert": false},
-    {"name": "창백", "slot_id": "pallor", "keywords": ["핏기", "창백", "핼쑥"], "alert": false},
-    {"name": "구토", "slot_id": "vomiting", "keywords": ["구토", "토함", "토해"], "alert": false},
-    {"name": "체중감소", "slot_id": "weight_loss", "keywords": ["살이 빠", "체중감소", "몸무게"], "alert": false},
-    {"name": "화농성 객담", "slot_id": "purulent_sputum", "keywords": ["누런 가래", "노란 가래", "진한 가래", "화농성"], "alert": false},
-    {"name": "검은색 가래", "slot_id": "black_sputum", "keywords": ["검은 가래", "검은색 가래", "거뭇한 가래"], "alert": false}
+    {"name": "흉통", "slot_id": "chest_pain", "keywords": ["가슴", "흉통"], "alert": true},
+    {"name": "두통", "slot_id": "headache", "keywords": ["머리", "두통"], "alert": false}
   ],
-  "symptom_quote_patterns": {
-    "throat_irritation": [
-      "목(?:이|은|도)?\\s*(?:좀\\s*)?(?:칼칼(?:하고|해요|합니다)?|따끔(?:해요|하고|합니다)?|아파요?|불편해요?|간질간질해요?)"
-    ],
-    "nasal_obstruction": [
-      "코\\S{0,4}\\s*(?:막혀요|막혀|막힙니다|맥혀요|맥혀|답답해요)"
-    ],
-    "rhinorrhea": [
-      "콧물(?:이|은|도)?\\s*(?:줄줄\\s*)?(?:흐르네요|흘러요|나와요|나요)",
-      "코물(?:이|은|도)?\\s*(?:줄줄\\s*)?(?:흐르네요|흘러요|나와요|나요)"
-    ],
-    "cough": [
-      "기침(?:이|은|도)?\\s*(?:조금\\s*)?(?:나요|나와요|심해요|심해졌어요|해요)",
-      "콜록(?:거려요|거립니다|해요)"
-    ],
-    "fever": [
-      "(?:열|발열)(?:이|은|도)?\\s*(?:나요|있어요|나는 것 같아요)"
-    ],
-    "sputum": [
-      "가래(?:가|는|도)?\\s*(?:나요|나와요|있어요|껴요)"
-    ],
-    "chest_discomfort": [
-      "가(?:슴|심)(?:이|은|도)?\\s*(?:답답(?:하고|해요|합니다|하다|허고|허다)?)"
-    ],
-    "chest_pain": [
-      "가슴(?:의|이|은)?\\s*(?:한쪽이?\\s*)?(?:결려요|결립니다|아파요|아픕니다|찌르듯\\s*아파요|찌르는\\s*통증)",
-      "숨(?:을)?\\s*쉴\\s*때마다\\s*가슴\\S{0,6}\\s*(?:결려요|결립니다|아파요|아픕니다)"
-    ],
-    "low_energy": [
-      "(?:몸에\\s*)?힘(?:이|은|도)?\\s*(?:잘\\s*)?(?:안\\s*)?(?:들어가요|들어가|들어갑니다|없어요|없어|없습니다)",
-      "기운(?:이|은|도)?\\s*(?:없어요|없어|없습니다)"
-    ],
-    "dizziness": [
-      "(?:머리(?:가|는|도)?\\s*)?(?:어지러워요|어지러움|어지러워|어지럽습니다|어질어질해요|어질어질)"
-    ],
-    "leg_edema": [
-      "다리(?:가|는|도)?\\s*(?:붓(?:기|기가)?|부어오릅니다|부었어요|부어)",
-      "다리\\s*부기"
-    ],
-    "myalgia": [
-      "(?:온몸|삭신)(?:이|은|도)?\\s*(?:쑤십니다|쑤셔요|쑤시고|결립니다|결려요)",
-      "몸살(?:이)?\\s*(?:난\\s*)?것\\s*같"
-    ]
-  },
+  "symptom_quote_patterns": {},
   "ir_stable_slot_ids": {
     "객혈": "hemoptysis",
     "기침": "cough",
@@ -127,15 +36,11 @@
     "호흡곤란": "dyspnea",
     "숨참": "dyspnea",
     "흉통": "chest_pain",
-    "가슴 답답": "chest_discomfort",
     "콧물": "rhinorrhea",
     "코막힘": "nasal_obstruction",
     "발열": "fever",
     "열": "fever",
-    "두통": "headache",
-    "천명음": "wheezing",
-    "목소리 변화": "voice_change",
-    "삼키기 곤란": "dysphagia"
+    "두통": "headache"
   },
   "ir_slot_to_canonical_name": {
     "hemoptysis": "객혈",
@@ -147,106 +52,14 @@
     "sputum": "가래",
     "fever": "열",
     "dyspnea": "호흡곤란",
-    "chest_discomfort": "가슴 답답",
     "chest_pain": "흉통",
-    "low_energy": "기운없음",
-    "dizziness": "어지러움",
-    "fatigue": "피로감",
-    "malaise": "권태감",
-    "wheezing": "천명음",
-    "headache": "두통",
-    "voice_change": "목소리 변화",
-    "radiating_pain": "방사통",
-    "abdominal_bloating": "복부팽만감",
-    "abdominal_pain": "복부 통증",
-    "leg_edema": "하지부종",
-    "limb_edema": "사지 부종",
-    "myalgia": "근육통",
-    "chills": "오한",
-    "muscle_weakness": "근력 약화",
-    "sweating": "발한",
-    "eye_discharge": "눈꼽",
-    "eye_redness": "눈의 충혈",
-    "dysphagia": "삼키기 곤란",
-    "pallor": "창백",
-    "vomiting": "구토",
-    "weight_loss": "체중감소",
-    "purulent_sputum": "화농성 객담",
-    "black_sputum": "검은색 가래",
-    "chest_pressure": "흉부압박감"
+    "headache": "두통"
   },
-  "ir_text_aliases": [
-    {"pattern": "목소리.{0,10}(쉬|쉰|안\\s*나|잘\\s*안\\s*나|나오지\\s*않|변|잠기)|쉰\\s*목소리|목이\\s*쉬", "canonical_name": "목소리 변화"},
-    {"pattern": "(피부|얼굴|얼굴빛).{0,10}(붉|빨개|빨갛|달아오|달아올|홍조|화끈)|피부.{0,8}(달아오|달아올)", "canonical_name": "피부홍조"},
-    {"pattern": "감기\\s*(기운|몸살|증상)|감기.{0,6}느낌", "canonical_name": "감기 증상"},
-    {"pattern": "기침.{0,12}(피|혈가래|피가래)|피.{0,10}(보이|비치|나오|나와|섞|묻|뱉)|혈가래|피가래", "canonical_name": "객혈"},
-    {"pattern": "(거품|포말).{0,8}(가래|객담)|(가래|객담).{0,8}(거품|포말)", "canonical_name": "거품이 섞인 가래"},
-    {"pattern": "(검은|검은색|거뭇한|거뭇하게|거무스름|까만|까매).{0,8}(가래|객담)|(가래|객담).{0,8}(검은|검은색|거뭇|거무스름|까만|까매)", "canonical_name": "검은색 가래"},
-    {"pattern": "(목에\\s*)?(가래|객담).{0,8}(걸|끼|붙)|(가래|객담).{0,8}(목에\\s*)?(걸|끼|붙)", "canonical_name": "가래"},
-    {"pattern": "(음식|물|약|알약).{0,14}(목에\\s*걸|안\\s*넘어|넘어가지)|(음식|물|약|알약).{0,14}삼키.{0,8}(힘들|어렵)", "canonical_name": "삼키기 곤란"},
-    {"pattern": "(침|음식|물).{0,8}삼킬.{0,8}(아프|통증|따갑)|삼킬.{0,8}(아프|통증|따갑)", "canonical_name": "목의 통증"},
-    {"pattern": "(사레|사래).{0,8}(걸|들)|물.{0,8}마시.{0,8}(사레|사래)|먹.{0,8}(사레|사래)|캑캑", "canonical_name": "사래걸림"},
-    {"pattern": "(맥|맥박).{0,10}(건너뛰|건너\\s*뛰|빠졌다|빠지는|들쑥날쑥|불규칙|엇박)|심장.{0,10}(엇박|불규칙|건너뛰)", "canonical_name": "부정맥"},
-    {"pattern": "심장.{0,8}빨리.{0,8}뛰는\\s*느낌", "canonical_name": "가슴 두근거림"},
-    {"pattern": "(맥|맥박).{0,10}(너무\\s*)?(빨리|빠르게|빠르|빨라)|심장.{0,10}(빠르게|빨라|빠른).{0,8}(뛰|뜀|뛰어)|심박.{0,8}빠", "canonical_name": "빈맥"},
-    {"pattern": "두근|쿵쿵|콩닥|심장.{0,8}(뛰|두근|콩닥)|가슴.{0,8}(뛰|두근|콩닥)", "canonical_name": "가슴 두근거림"},
-    {"pattern": "가슴.{0,14}(팔|어깨).{0,10}(퍼|뻗)|가슴.{0,8}아픈.{0,12}(팔|어깨)|아픈.{0,8}(팔|어깨).{0,8}(퍼|뻗)|팔까지\\s*퍼", "canonical_name": "방사통"},
-    {"pattern": "숨\\s*(쉴|쉬).{0,16}가슴|가슴.{0,12}(결리|결려|찌르|아프|통증)", "canonical_name": "흉통"},
-    {"pattern": "숨.{0,8}(쌕쌕|쌕쌕거리)|쌕쌕|천명", "canonical_name": "천명음"},
-    {"pattern": "(걷|걸을|걸어|계단|활동|운동).{0,12}숨|조금만.{0,8}숨", "canonical_name": "운동 시 호흡곤란"},
-    {"pattern": "숨.{0,6}(가쁘|가빠|가쁜|차|찬다|참)", "canonical_name": "호흡곤란"},
-    {"pattern": "냄새.{0,12}(못\\s*맡|맡기\\s*어렵)|후각.{0,8}(저하|둔)", "canonical_name": "코막힘"},
-    {"pattern": "머리.{0,12}(핑\\s*돌|빙빙|빙\\s*도)|핑\\s*돌|빙빙\\s*도|현기|어지러|어질", "canonical_name": "어지러움"},
-    {"pattern": "머리(?:깽이)?.{0,12}(아프|깨질|쑤시|지끈|지끈지끈)|두통", "canonical_name": "두통"},
-    {"pattern": "온몸.{0,8}(쑤시|욱신|결리)|근육.{0,8}(쑤시|욱신|아프)|몸살", "canonical_name": "근육통"},
-    {"pattern": "몸(?:땡이)?에?.{0,8}힘.{0,8}(쭉\\s*)?빠|몸.{0,8}힘.{0,8}없", "canonical_name": "기운없음"},
-    {"pattern": "(팔다리|팔|다리).{0,8}힘.{0,8}(안\\s*들|없|빠)|힘.{0,8}(부쩍|많이)?\\s*약|근력.{0,8}(약|떨어)", "canonical_name": "근력 약화"},
-    {"pattern": "눈.{0,8}(빨개|빨갛|벌겋|충혈)", "canonical_name": "눈의 충혈"},
-    {"pattern": "눈꺼풀.{0,10}(축\\s*처|처지|무겁)|눈.{0,8}(무겁|침침|감기)", "canonical_name": "눈이 무거운 느낌"},
-    {"pattern": "피곤|피로|자도자도", "canonical_name": "피로감"},
-    {"pattern": "묽은\\s*변|설사|변을.{0,8}(여러|몇)\\s*번", "canonical_name": "설사"},
-    {"pattern": "울렁|토할\\s*(것|거)\\s*같|구토감", "canonical_name": "구토"},
-    {"pattern": "(춥|추워|으슬|오한|한기).{0,16}(떨|덜덜)|몸.{0,12}(춥|으슬).{0,8}(떨|덜덜)", "canonical_name": "오한"},
-    {"pattern": "온몸.{0,8}(떨|덜덜)|몸이\\s*(심하게\\s*)?떨|몸\\s*떨림|떨리는\\s*느낌", "canonical_name": "온몸이 떨림"},
-    {"pattern": "으슬|추워|춥고|몸.{0,8}춥", "canonical_name": "오한"},
-    {"pattern": "몸.{0,8}(무겁|처지|축\\s*처)|의욕.{0,4}없|나른|처지|축\\s*처", "canonical_name": "권태감"},
-    {"pattern": "피.{0,4}(가래|섞|묻)|객혈", "canonical_name": "객혈"},
-    {"pattern": "(누런|노란|진한|화농성).{0,4}(가래|객담)", "canonical_name": "화농성 객담"},
-    {"pattern": "목.{0,8}(아프|통증|따갑|따끔|칼칼|쓰림|불편)|인후.{0,8}(통증|아프|불편)|칼칼|따끔", "canonical_name": "목의 통증"},
-    {"pattern": "코.{0,3}(막|맥)|비폐색", "canonical_name": "코막힘"},
-    {"pattern": "콧물|코물", "canonical_name": "콧물"},
-    {"pattern": "가래|객담", "canonical_name": "가래"},
-    {"pattern": "기침|콜록", "canonical_name": "기침"},
-    {"pattern": "숨|호흡곤란|숨참", "canonical_name": "호흡곤란"},
-    {"pattern": "가(?:슴|심).{0,10}(답답|막히|꽉\\s*막|꽉\\s*찬|체한\\s*듯)", "canonical_name": "가슴 답답"},
-    {"pattern": "가슴.{0,8}(결리|찌르|찌릿|콕콕|쑤시|아프|통증|한쪽)|숨.{0,8}가슴.{0,8}(결리|아프)|흉통", "canonical_name": "흉통"},
-    {"pattern": "(꽉|짓)?\\s*누르|압박|눌리는", "canonical_name": "흉부압박감"},
-    {"pattern": "몸에\\s*힘|힘.{0,4}(없|안\\s*들)|기운\\s*없|무기력", "canonical_name": "기운없음"},
-    {"pattern": "어지러|어질|현기", "canonical_name": "어지러움"},
-    {"pattern": "어깨에서\\s*팔|팔로\\s*(뻗|찌르르)|뻗치|방사통", "canonical_name": "방사통"},
-    {"pattern": "배.{0,4}(빵빵|더부룩|부풀)|복부팽만", "canonical_name": "복부팽만감"},
-    {"pattern": "배.{0,4}(아프|살살)|복통", "canonical_name": "복부 통증"},
-    {"pattern": "손발.{0,4}(붓|부어)|팔다리.{0,4}붓", "canonical_name": "사지 부종"},
-    {"pattern": "다리.{0,4}(붓|부기|부어)", "canonical_name": "하지부종"},
-    {"pattern": "온몸.{0,4}쑤시|삭신|몸살|근육통|결리", "canonical_name": "근육통"},
-    {"pattern": "오한|한기|춥|이불", "canonical_name": "오한"},
-    {"pattern": "나른|처짐|축\\s*처|권태", "canonical_name": "권태감"},
-    {"pattern": "팔다리.{0,6}힘|힘이\\s*(들어가지|안\\s*들어)", "canonical_name": "근력 약화"},
-    {"pattern": "식은땀|땀|발한", "canonical_name": "발한"},
-    {"pattern": "눈곱|눈꼽", "canonical_name": "눈꼽"},
-    {"pattern": "눈.{0,4}(빨갛|충혈)", "canonical_name": "눈의 충혈"},
-    {"pattern": "삼키|넘어가지|목에\\s*걸리", "canonical_name": "삼키기 곤란"},
-    {"pattern": "핏기|창백|핼쑥", "canonical_name": "창백"},
-    {"pattern": "구토|토함|토해|토하", "canonical_name": "구토"},
-    {"pattern": "살이\\s*빠|체중\\s*감소|몸무게", "canonical_name": "체중감소"},
-    {"pattern": "쌕쌕|천명", "canonical_name": "천명음"},
-    {"pattern": "열|발열|고열", "canonical_name": "열"}
-  ],
-  "ir_red_flag_names": ["객혈", "호흡곤란", "가슴 답답", "흉통", "청색증", "의식 변화"],
+  "ir_text_aliases": [],
+  "ir_red_flag_names": ["객혈", "호흡곤란", "흉통", "청색증", "의식 변화"],
   "safety_flags": [
     {"category": "hemoptysis", "label": "객혈 의심", "severity": "high", "pattern": "객혈|피(?:가)?\\s*(섞인|섞여|나온|나와)|피가래|가래.*피|피.*가래|피를\\s*토|피\\s*토"},
     {"category": "dyspnea", "label": "호흡곤란", "severity": "high", "pattern": "숨이\\s*(안|너무|많이)\\s*(차|막|막혀)|숨\\s*못\\s*쉬|호흡\\s*곤란|말을\\s*못\\s*할"},
-    {"category": "chest_discomfort", "label": "가슴 답답", "severity": "high", "pattern": "가(?:슴|심)(?:이)?\\s*(?:답답|답답허|답답하)"},
     {"category": "chest_pain", "label": "흉통", "severity": "high", "pattern": "가슴(?:이)?\\s*(통증|아프|아파|아픈|쥐어|답답)|흉통|쥐어짜"},
     {"category": "cyanosis", "label": "청색증", "severity": "high", "pattern": "입술.*(파래|푸르)|손끝.*(파래|푸르)|청색증"},
     {"category": "consciousness", "label": "의식 변화", "severity": "high", "pattern": "의식|기절|쓰러졌|정신.*(없|잃)|깨워도"},

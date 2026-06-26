@@ -1,5 +1,5 @@
 param(
-  [string]$InputPath = "evaluation\ir\data\eval_cases.json",
+  [string]$InputPath = "evaluation\ir\data\generated\test_1000\cases.locked.json",
   [string]$OutputDir = "",
   [int]$TopK = 20,
   [switch]$FullPipeline,
