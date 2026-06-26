@@ -11,10 +11,11 @@
     export MUNJIN_API_URL=https://<api-id>.execute-api.<region>.amazonaws.com
     export MUNJIN_TABLE=MunjinSessions
     export MUNJIN_ARTIFACTS_BUCKET=<artifacts-bucket-name>
-    python3 test_aws_full.py
+    python tests/aws/test_aws_full.py
 """
 import json
 import os
+import sys
 import time
 import boto3
 from botocore.config import Config
@@ -24,6 +25,14 @@ LAMBDA_NAME = os.environ.get("MUNJIN_LAMBDA_NAME", "")
 API_URL = os.environ.get("MUNJIN_API_URL", "")
 TABLE_NAME = os.environ.get("MUNJIN_TABLE", "MunjinSessions")
 ARTIFACTS_BUCKET = os.environ.get("MUNJIN_ARTIFACTS_BUCKET", "")
+
+if "pytest" in sys.modules and os.environ.get("MUNJIN_RUN_AWS_INTEGRATION") != "1":
+    import pytest
+
+    pytest.skip(
+        "AWS 통합 테스트는 MUNJIN_RUN_AWS_INTEGRATION=1 설정 시에만 pytest에서 실행합니다.",
+        allow_module_level=True,
+    )
 
 _missing = [
     name for name, value in [
