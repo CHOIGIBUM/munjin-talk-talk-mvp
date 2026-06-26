@@ -148,7 +148,7 @@ flowchart LR
 | 영역 | 기술 | 도입 목적 |
 | --- | --- | --- |
 | Frontend | React 18, Vite, React Router | 접수·태블릿·원페이퍼·안내문을 하나의 경량 SPA로 구성 |
-| Hosting | AWS Amplify | 배포 URL 제공, HTTPS, 프론트 빌드 자동화, WAF 연계 |
+| Hosting | AWS Amplify | 배포 URL 제공, HTTPS, 프론트 빌드 자동화. WAF는 제출 AWS 환경에서 별도 연계 |
 | API / Compute | API Gateway HTTP API, AWS Lambda (Python 3.12) | 문진 세션과 LLM 파이프라인을 서버리스로 실행 |
 | 음성 인식 | Amazon Transcribe Streaming | 음성 원본을 저장하지 않고 확정 텍스트만 처리 |
 | LLM | Amazon Bedrock — Nova Pro(강), Nova Lite(경) | 복잡한 구조화·검토와 가벼운 표준화 작업을 분리 |
@@ -239,7 +239,7 @@ flowchart TB
 | --- | --- |
 | 환자 원문 | `"어제부터 목도 아프고 콧물도 조금 나와요"` |
 | 표준화 | `"어제부터 목도 아프고 콧물도 조금 나와요"` |
-| LLM span | `source_quote="목도 아프고"`, `normalized_text="목이 아픔"`, `status="new"`, `symptom_hint="목 통증"` |
+| LLM span | `source_quote="목도 아프고"`, `normalized_text="목이 아픔"`, `type="new"`, `status="있음"`, `symptom_hint="목 통증"` |
 | IR query | `목이 아픔 목 통증` |
 | 표준 증상 매칭 | 서울아산병원 질병백과 기반 `symptom_index`와 `diseases_cleaned`에서 생성한 후보 중 `목의 통증` slot 확정 |
 | 원페이퍼 표시 | 증상명, 환자 원문 quote, 문진 맥락을 함께 표시하고 의료진이 확인 |
@@ -260,6 +260,8 @@ flowchart TB
 | 전체 held-out benchmark | 500 | 중증 징후, confounder, 부정/호전 문맥까지 포함한 넓은 평가 | 0.7223 | 0.7859 | 0.7527 |
 | train/dev 개선 확인 | 100 | 프롬프트·IR 보정용 개발 데이터 | 1.0000 | 0.9369 | 0.9674 |
 
+공개 저장소에는 평가 코드, 샘플 입력, 요약 리포트만 포함합니다. 위 150/500건 전체 평가 데이터와 Bedrock raw trace, 실행 결과 CSV/JSON은 비공개 제출 자료 또는 로컬 산출물로 관리합니다.
+
 일반 호흡기 150개에서는 F1 0.8934를 기록했습니다. 이 수치는 문진톡톡이 목표로 한 외래 호흡기 문진 상황에서 환자 발화를 표준 증상 후보와 비교적 안정적으로 연결한다는 의미입니다.
 
 반면 500개 held-out 평가는 더 어렵습니다. 흉부 불편감, 심혈관·신경·위장관 혼동 표현, 부정 표현, 호전 표현이 함께 들어 있어 F1이 0.7527로 내려갑니다. 이 차이는 문진톡톡이 "범용 자동 진단기"가 아니라 "진료 전 문진 정리 보조 도구"라는 점을 분명히 보여줍니다.
@@ -270,7 +272,7 @@ flowchart TB
 
 ## 🔐 저장 최소화 원칙
 
-문진톡톡은 환자 식별 정보와 음성 원본을 오래 보관하지 않는 방향으로 설계했습니다. 서비스 실행에 꼭 필요한 상태값은 DynamoDB에 작게 남기고, 의료진 확인에 필요한 상세 산출물은 가명처리된 JSON만 S3에 분리 저장합니다. AWS 콘솔에서 적용한 WAF, CloudTrail, Macie 같은 운영 보안 설정은 아래 `운영 보안 수준`에 따로 정리했습니다.
+문진톡톡은 환자 식별 정보와 음성 원본을 오래 보관하지 않는 방향으로 설계했습니다. 서비스 실행에 꼭 필요한 상태값은 DynamoDB에 작게 남기고, 의료진 확인에 필요한 상세 산출물은 가명처리된 JSON만 S3에 분리 저장합니다. 코드에 반영된 저장 경계와 AWS 콘솔에서 별도 적용한 WAF, CloudTrail, Macie 같은 운영 보안 설정은 아래 `운영 보안 수준`에 따로 정리했습니다.
 
 | 저장소 | 저장하는 값 | 저장하지 않는 값 |
 | --- | --- | --- |
@@ -319,10 +321,12 @@ VITE_API_BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com
 
 ### 3. 백엔드 배포
 
+SAM 템플릿은 API Gateway와 Lambda 연결을 정의하되, DynamoDB table, S3 artifact bucket, Lambda IAM role은 기존 리소스를 파라미터로 받아 사용합니다. 실제 배포 파라미터는 [backend/serverless/README.md](backend/serverless/README.md)를 기준으로 확인합니다.
+
 ```bash
 cd backend/serverless
 sam build
-sam deploy --guided   # ArtifactsBucketName 에 가명처리 산출물용 S3 버킷명 입력
+sam deploy --guided
 ```
 
 ### 4. 배포 시 필요한 비공개 데이터
@@ -365,7 +369,7 @@ munjin-talk-talk/
 
 ## 🛡️ 운영 보안 수준
 
-문진톡톡의 코드 설정과 AWS 콘솔에서 적용한 운영 보안 설정을 함께 정리한 내용입니다. 문진톡톡은 의료 문진 텍스트가 오가는 서비스로, 음성 원본 미저장·가명처리·저장 최소화·접근 제어를 기본 원칙으로 안전하게 설계했습니다.
+문진톡톡의 코드 설정과 제출 AWS 환경에서 별도 확인·적용한 운영 보안 설정을 함께 정리한 내용입니다. 문진톡톡은 의료 문진 텍스트가 오가는 서비스로, 음성 원본 미저장·가명처리·저장 최소화·접근 제어를 기본 원칙으로 안전하게 설계했습니다.
 
 | 구분 | 적용 내용 |
 | --- | --- |

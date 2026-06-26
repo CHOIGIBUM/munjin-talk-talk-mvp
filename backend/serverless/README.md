@@ -95,21 +95,27 @@ serverless/
 | 변수 | 설명 |
 | --- | --- |
 | `SESSIONS_TABLE` | DynamoDB table name |
-| `ARTIFACT_BUCKET` | S3 artifact bucket name |
-| `STAFF_ACCESS_TOKEN` | 직원 접근 코드 |
-| `DOCTOR_ACCESS_TOKEN` | 의료진 접근 코드 |
+| `ARTIFACTS_BUCKET` | S3 artifact bucket name |
+| `STAFF_ACCESS_CODE` | 직원 접근 코드. 기존 배포 호환을 위해 `STAFF_ACCESS_TOKEN`도 보조로 읽음 |
+| `DOCTOR_ACCESS_CODE` | 의료진 접근 코드. 기존 배포 호환을 위해 `DOCTOR_ACCESS_TOKEN`도 보조로 읽음 |
 | `AUTH_SIGNING_SECRET` | 로그인 세션 토큰 서명 secret |
-| `CORS_ALLOW_ORIGIN` | 허용할 Amplify origin |
-| `USE_BEDROCK_LLM` | Bedrock LLM 사용 여부 |
-| `ENABLE_BEDROCK_REVIEW` | 원페이퍼 review LLM 사용 여부 |
-| `ENABLE_BEDROCK_GUIDE` | 환자 안내문 LLM 사용 여부 |
+| `AUTH_TOKEN_TTL_MINUTES` | 직원/의료진 세션 토큰 유효 시간 |
+| `ALLOWED_ORIGINS` | 허용할 Amplify origin. SAM parameter 이름은 `CorsAllowOrigin` |
+| `DOMAIN_PACK` | 사용할 도메인팩 id. 기본값 `respiratory` |
+| `QUESTION_SET` | 사용할 질문셋 id. 기본값 `default` |
+| `DIALECT_PACK` | 사용할 방언팩 id. 기본값 `dialect_kangwon` |
+| `DIALECT_TOP_K` | 방언 RAG hint 검색 개수 |
 | `LIGHT_MODEL_ID` | Nova Lite model id |
 | `STRONG_MODEL_ID` | Nova Pro model id |
 | `REVIEWER_MODEL_ID` | review LLM model id |
 | `GUIDE_MODEL_ID` | guide LLM model id |
+| `EMBEDDING_MODEL_ID` | Titan embedding model id |
+| `EMBEDDING_DIMENSIONS` | embedding 차원 |
+| `S3_SERVER_SIDE_ENCRYPTION` | S3 artifact 저장 시 사용할 서버 측 암호화 방식 |
+| `S3_KMS_KEY_ID` | KMS key id/ARN. 비어 있으면 SSE-S3 사용 |
 | `CUSTOM_VOCABULARY` | Transcribe custom vocabulary name, 없으면 빈 값 |
 
-접근 코드는 사람이 외울 수 있는 값으로 운영 환경에서 설정하고, `AUTH_SIGNING_SECRET`은 긴 난수로 유지합니다.
+접근 코드는 사람이 외울 수 있는 값으로 운영 환경에서 설정하고, `AUTH_SIGNING_SECRET`은 긴 난수로 유지합니다. `sam deploy`에서는 `StaffAccessToken`, `DoctorAccessToken`, `CorsAllowOrigin` 파라미터가 각각 Lambda 환경 변수 `STAFF_ACCESS_CODE`, `DOCTOR_ACCESS_CODE`, `ALLOWED_ORIGINS`로 주입됩니다.
 
 ---
 
@@ -248,7 +254,7 @@ __pycache__/
 | --- | --- | --- |
 | 원페이퍼가 계속 생성 중 | 백그라운드 Lambda 실패 또는 Bedrock 권한 문제 | CloudWatch log, DynamoDB status |
 | 증상 매칭이 비어 있음 | 비공개 IR 데이터 누락 | `src/data/README.md`의 필수 파일 |
-| CORS 오류 | Amplify URL과 `CORS_ALLOW_ORIGIN` 불일치 | Lambda 환경 변수, API Gateway CORS |
+| CORS 오류 | Amplify URL과 `ALLOWED_ORIGINS` 또는 SAM `CorsAllowOrigin` 불일치 | Lambda 환경 변수, API Gateway CORS |
 | 접근 코드 로그인 실패 | 환경 변수 값 또는 배포 stack 불일치 | Lambda 환경 변수, CloudFormation stack |
 | SAM deploy parameter 오류 | 빈 문자열 parameter 형식 문제 | `sam deploy --guided` 사용 또는 해당 parameter 생략 |
 
