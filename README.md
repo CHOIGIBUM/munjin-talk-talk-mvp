@@ -182,7 +182,7 @@ flowchart LR
 
 즉, Hybrid IR은 “LLM이 증상명을 만들어내는 단계”가 아니라, 환자의 자연어 표현을 검증 가능한 표준 증상 데이터에 연결하는 안전장치입니다. 이 구조 덕분에 원페이퍼에는 임의로 생성된 증상명이 아니라 원천 데이터에 존재하는 표준 증상 후보만 표시됩니다.
 
-IR은 내부 배포 환경의 비공개 런타임 데이터(`diseases_cleaned.json`, `symptom_index.json`, Titan embedding cache)를 사용합니다. 이 데이터는 서울아산병원 질병백과 기반 데이터와 그 파생 데이터이므로 공개 Git 저장소에는 포함하지 않았습니다. 공개 저장소에는 데이터 구조와 배치 기준만 남기고, 데모/운영 배포에서는 팀 내부 비공개 경로의 런타임 데이터를 Lambda 패키지에 포함해 Hybrid IR이 동일하게 작동하도록 구성하였습니다.
+IR은 내부 배포 환경의 비공개 런타임 데이터(`diseases_cleaned.json`, `symptom_index.json`, Titan embedding cache)를 사용합니다. 이 데이터는 서울아산병원 질병백과 기반 데이터와 그 파생 데이터이므로 공개 Git 저장소에는 포함하지 않았습니다. 공개 저장소에는 데이터 구조와 배치 기준만 남기고, 데모/운영 배포에서는 팀 내부 비공개 경로의 런타임 데이터를 Lambda 패키지에 포함해 Hybrid IR이 동일하게 작동하도록 구성했습니다.
 
 1. LLM extraction이 환자 발화에서 `source_quote`, `normalized_text`, `name`을 가진 증상 span을 생성합니다.
 2. IR query는 `normalized_text + name`을 중심으로 구성하고, 원문 `source_quote`는 화면 근거와 검증용으로 보존합니다.
@@ -289,7 +289,7 @@ flowchart TB
 
 ### 1. 데모 확인
 
-배포된 서비스는 상단의 [데모 URL](https://main.dv5herezqtt1t.amplifyapp.com)에서 확인합니다. 직원/의사 접근 코드는 최종 제출 자료와 발표자료에 별도로 존재합니다.
+배포된 서비스는 상단의 [데모 URL](https://main.dv5herezqtt1t.amplifyapp.com)에서 확인할 수 있습니다. 직원/의사 접근 코드는 최종 제출 자료와 발표자료에 별도로 기재되어 있습니다.
 
 ### 2. 프론트엔드 로컬 실행
 
@@ -321,7 +321,7 @@ VITE_API_BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com
 
 ### 3. 백엔드 배포
 
-SAM 템플릿은 API Gateway와 Lambda 연결을 정의하되, DynamoDB table, S3 artifact bucket, Lambda IAM role은 기존 리소스를 파라미터로 받아 사용합니다. 실제 배포 파라미터는 [backend/serverless/README.md](backend/serverless/README.md)를 기준으로 확인합니다.
+SAM 템플릿은 API Gateway와 Lambda 연결을 정의하되, DynamoDB table, S3 artifact bucket, Lambda IAM role은 기존 리소스를 파라미터로 받아 사용합니다. 실제 배포 파라미터는 [backend/serverless/README.md](backend/serverless/README.md)를 참고하시기 바랍니다.
 
 ```bash
 cd backend/serverless
@@ -331,7 +331,7 @@ sam deploy --guided
 
 ### 4. 배포 시 필요한 비공개 데이터
 
-프론트엔드, Lambda 코드, SAM 템플릿, 스키마, 평가 스크립트는 공개 저장소에 포함되어 있습니다. 데모/운영 배포에서는 저작권과 보안 처리가 필요한 서울아산병원 질병백과 기반 IR 런타임 데이터(`diseases_cleaned.json`, `symptom_index.json`, embedding cache`)만 팀 내부 비공개 경로에서 Lambda 패키지에 배치합니다. 공개 저장소만 clone한 환경에서는 해당 파일을 배치하지 않으면 Hybrid IR 증상 매칭이 제한됩니다.
+프론트엔드, Lambda 코드, SAM 템플릿, 스키마, 평가 스크립트는 공개 저장소에 포함되어 있습니다. 데모/운영 배포에서는 저작권과 보안 처리가 필요한 서울아산병원 질병백과 기반 IR 런타임 데이터(`diseases_cleaned.json`, `symptom_index.json`, `embedding cache`)만 팀 내부 비공개 경로에서 Lambda 패키지에 배치합니다. 공개 저장소만 클론(clone)한 환경에서는 해당 파일이 배치되지 않을 경우 Hybrid IR 기반 증상 매칭이 제한됩니다.
 
 ## 🗂️ 저장소 구조
 
