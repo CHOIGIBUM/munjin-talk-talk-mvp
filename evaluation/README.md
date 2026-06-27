@@ -9,6 +9,19 @@
 | End-to-End 문진 파이프라인 | 환자 발화에서 실제로 증상을 잘 추출하고 표준 증상까지 연결했는가 | 제품 사용자가 체감하는 최종 성능 |
 | Hybrid IR 후보 검색 | 정답 표준 증상이 top-k 후보 안에 들어오는가 | LLM 이후 검색/매칭 병목을 분리해서 확인 |
 
+## main과 평가 브랜치의 역할
+
+`main/evaluation`은 공식 성능 요약과 재현 가능한 샘플 평가 코드를 담습니다. 세부 실험 전체를 main에 모두 합치지 않고, 실험 성격이 강한 자료는 별도 브랜치로 분리했습니다.
+
+| 자료 | main과의 관계 | 확인할 내용 |
+| --- | --- | --- |
+| `main/evaluation` | 공식 요약 | End-to-End 문진 성능, 공개 샘플, 평가 실행 구조 |
+| [`eval/dialect-rag`](https://github.com/X-AI-KNU/munjin-talk-talk/tree/eval/dialect-rag) | 보조 실험 근거 | 사투리/구어체를 표준어 보조 문장으로 바꿀 때 의미가 보존되는지 |
+| [`eval/hybrid-ir-pipeline`](https://github.com/X-AI-KNU/munjin-talk-talk/tree/eval/hybrid-ir-pipeline) | 보조 실험 근거 | 후보 검색, 사투리 RAG hint, Bedrock 파이프라인 병목 분리 |
+| [`test/add-coverage`](https://github.com/X-AI-KNU/munjin-talk-talk/tree/test/add-coverage) | 검증 체계 근거 | 로컬 테스트, AWS 수동 통합 테스트, IR 평가 보조 코드 |
+
+해커톤 심사에서는 `main/evaluation`의 수치를 공식 요약으로 보고, 세부 브랜치는 "왜 그런 구조로 평가했는지"와 "어떤 한계를 확인했는지"를 설명하는 보조 자료로 보면 됩니다.
+
 ## 공개 폴더 구성
 
 ```text
@@ -94,6 +107,8 @@ python evaluation\scripts\run_ir_eval.py `
 자세한 수치와 해석은 [reports/performance_summary.md](reports/performance_summary.md)에 정리했습니다.
 
 요약하면, 일반 호흡기 문진 150개 focused benchmark에서는 End-to-End F1 0.8934를 기록했습니다. 이 평가는 문진톡톡이 목표로 한 일반 외래 호흡기 문진 상황에 가장 가까운 설명용 지표입니다. 반면, 중증 징후와 비호흡기 confounder까지 넓게 섞은 held-out 500개에서는 F1이 약 0.75 수준으로 낮아집니다. 따라서 문진톡톡은 "모든 임상 증상을 포괄하는 자동 진단기"가 아니라, "고령 환자의 호흡기 문진 발화를 의료진이 빠르게 확인할 수 있게 정리하는 보조 도구"로 설명하는 것이 정확합니다.
+
+공개 발표에서 train/dev 100개 수치는 개선 확인용으로만 설명합니다. 제품 성능을 대표하는 수치는 focused 150개와 held-out 500개를 중심으로 말하고, 사투리 RAG나 Hybrid IR의 세부 과정은 별도 평가 브랜치의 문서를 함께 연결합니다.
 
 ## Git 관리 기준
 

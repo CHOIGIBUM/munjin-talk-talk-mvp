@@ -10,10 +10,11 @@
 | 순서 | 문서 | 확인할 내용 |
 | --- | --- | --- |
 | 1 | [루트 README](../README.md) | 문제 정의, 서비스 흐름, 핵심 기술, 보안 수준 |
-| 2 | [LangGraph 문진 처리 파이프라인](LANGGRAPH_PIPELINE.md) | 환자 답변이 원페이퍼와 안내문으로 바뀌는 과정 |
-| 3 | [내부 JSON 스키마](DATA_SCHEMA.md) | DynamoDB, S3 artifact, 원페이퍼, 안내문 데이터 구조 |
-| 4 | [보안 데이터 인벤토리](SECURITY_DATA_INVENTORY.md) | 개인정보와 건강정보가 어디에 저장되고 어떻게 보호되는지 |
-| 5 | [프로젝트 구조](PROJECT_STRUCTURE.md) | 프론트엔드와 백엔드 코드가 어떤 책임으로 나뉘어 있는지 |
+| 2 | [평가 패키지](../evaluation/README.md) | main 브랜치의 공식 성능 요약과 공개/비공개 산출물 기준 |
+| 3 | [LangGraph 문진 처리 파이프라인](LANGGRAPH_PIPELINE.md) | 환자 답변이 원페이퍼와 안내문으로 바뀌는 과정 |
+| 4 | [내부 JSON 스키마](DATA_SCHEMA.md) | DynamoDB, S3 artifact, 원페이퍼, 안내문 데이터 구조 |
+| 5 | [보안 데이터 인벤토리](SECURITY_DATA_INVENTORY.md) | 개인정보와 건강정보가 어디에 저장되고 어떻게 보호되는지 |
+| 6 | [프로젝트 구조](PROJECT_STRUCTURE.md) | 프론트엔드와 백엔드 코드가 어떤 책임으로 나뉘어 있는지 |
 
 ---
 
@@ -39,6 +40,21 @@
 | [MVP_SETUP.md](MVP_SETUP.md) | 로컬 실행, AWS 연결, 시연 전 점검 방법 |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | 저장소 폴더 구조와 주요 파일 책임 |
 | [SECURITY_DATA_INVENTORY.md](SECURITY_DATA_INVENTORY.md) | 저장소별 데이터 경계, 가명처리, 보관 정책 |
+
+---
+
+## 평가와 검증 자료
+
+`main` 브랜치에는 공식 서비스 설명과 핵심 성능 요약을 둡니다. 세부 실험과 테스트 근거는 아래 브랜치로 분리했습니다.
+
+| 자료 | 역할 |
+| --- | --- |
+| [main/evaluation](../evaluation/README.md) | 공식 End-to-End 성능 평가 구조와 공개 요약 |
+| [eval/dialect-rag](https://github.com/X-AI-KNU/munjin-talk-talk/tree/eval/dialect-rag) | 사투리 RAG 의미 보존 평가 |
+| [eval/hybrid-ir-pipeline](https://github.com/X-AI-KNU/munjin-talk-talk/tree/eval/hybrid-ir-pipeline) | Hybrid IR 후보 검색과 Bedrock 파이프라인 분리 평가 |
+| [test/add-coverage](https://github.com/X-AI-KNU/munjin-talk-talk/tree/test/add-coverage) | 로컬 테스트와 AWS 수동 통합 테스트 정리 |
+
+심사위원이 성능 수치의 근거를 볼 때는 먼저 `main/evaluation`의 공식 요약을 보고, 사투리 RAG와 Hybrid IR의 세부 실험은 각 평가 브랜치에서 확인하면 됩니다.
 
 ---
 
