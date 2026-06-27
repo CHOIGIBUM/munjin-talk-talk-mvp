@@ -26,7 +26,7 @@
 | 화면 | URL | 사용자 | 역할 |
 | --- | --- | --- | --- |
 | 직원 접수 | `/staff` | 접수처 직원 | 환자 정보 입력, 세션 생성, 오늘 접수 목록, 직원 수동 문진 입력 |
-| 환자 태블릿 대기열 | `/tablet` | 환자·직원 | 문진 대기 환자 선택 |
+| 환자 태블릿 대기열 | `/patient` | 환자·직원 | 문진 대기 환자 선택 |
 | 환자 문진 | `/patient/:sessionId` | 환자 | 동의, 초진/재진 확인, 음성 문진, STT 결과 확인, 직원 도움 요청 |
 | 의사 대기열 | `/doctor/queue` | 의료진 | 분석 중·문진 완료·우선 확인 환자 목록 |
 | 의료진 원페이퍼 | `/doctor/:sessionId` | 의료진 | 증상, 원문, 문진 요약, 환자 질문, 확인 항목, EMR 초안 |
@@ -40,7 +40,7 @@
 /staff
   -> 환자 접수와 문진 세션 생성
 
-/tablet
+/patient
   -> 문진 대기 환자 선택
 
 /patient/:sessionId
@@ -161,10 +161,10 @@ frontend/
 
 | 파일 | 역할 |
 | --- | --- |
-| `components/tablet/TabletQueueView.jsx` | 문진 대기 환자 선택 |
+| `components/patient/PatientTabletQueueView.jsx` | 문진 대기 환자 선택 |
 | `components/patient/PatientKioskView.jsx` | 세션 로딩과 환자 화면 진입 |
 | `PatientFlow.jsx` | 환자 문진 상태 흐름 |
-| `ConsentModal.jsx` | 서비스 이용 동의 |
+| `PrivacyConsentModal.jsx` | 서비스 이용 동의 |
 | `VisitTypeScreen.jsx` | 초진/재진 확인 |
 | `VoiceScreen.jsx` | 음성 입력 |
 | `ConfirmTranscriptScreen.jsx` | 전사 결과 확인·수정 |
@@ -179,7 +179,7 @@ frontend/
 | `DoctorView.jsx` | 원페이퍼 데이터 로딩 |
 | `DoctorOnePager.jsx` | 원페이퍼 화면 |
 | `DoctorAgendaPanel.jsx` | 환자 질문 답변, 안내 강조사항 |
-| `DoctorSymptomPanel.jsx` | 매칭된 증상과 원문 quote |
+| `DoctorOnePagerParts.jsx` | 매칭된 증상과 원문 quote |
 
 ### 환자 안내문
 

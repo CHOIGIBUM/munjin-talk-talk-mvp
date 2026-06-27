@@ -71,7 +71,7 @@ backend/
     ├── README.md
     ├── src/
     │   ├── handler.py
-    │   ├── auth.py
+    │   ├── security.py
     │   ├── orchestration.py
     │   ├── sessions.py
     │   ├── artifact_store.py
@@ -108,7 +108,7 @@ backend/
 | 파일 | 설명 |
 | --- | --- |
 | `handler.py` | API Gateway route 분기 |
-| `auth.py` | 직원/의사 접근 코드 로그인, 세션 토큰 검증 |
+| `security.py` | 직원/의사 접근 코드 로그인, 세션 토큰 검증 |
 | `orchestration.py` | `/process-answers`, background analysis, 재분석 진입점 |
 | `sessions.py` | DynamoDB 세션 상태 저장/조회 |
 | `artifact_store.py` | S3 redacted artifact 저장/조회 |
