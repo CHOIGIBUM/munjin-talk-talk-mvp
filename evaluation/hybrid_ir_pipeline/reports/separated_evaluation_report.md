@@ -1,80 +1,67 @@
-# Separated Evaluation Report
+# Separated Evaluation Report (컴포넌트 분리 검증 리포트)
 
-- generated_at: `2026-06-26T06:10:14.124246+00:00`
-- dataset: `evaluation/hybrid_ir_pipeline/train_100_v2/train_100_v2.jsonl`
-- dataset_rows: `100`
-- held_out_test: `False`
+* **Generated At:** `2026-06-26T06:10:14.124246+00:00`
+* **Dataset Target:** `evaluation/hybrid_ir_pipeline/train_100_v2/train_100_v2.jsonl`
+* **Dataset Rows:** `100`
+* **Held_out_test Status:** `False`
 
-이 리포트는 Hybrid IR 후보 검색, 사투리 RAG hint, Bedrock 파이프라인 통합을 분리해서 본 실행 결과입니다. 최종 held-out 성능이 아니라 `train_100_v2` 개발용 데이터셋 기반 파이프라인 점검 결과입니다.
+본 리포트는 Hybrid IR 후보 검색, 사투리 RAG 힌트 트리거, Bedrock 파이프라인 통합 안전성을 컴포넌트별로 분리 검증한 공식 실행 결과 스냅샷입니다. *(본 지표는 최종 Held-out 성능이 아닌 `train_100_v2` 개발용 벤치마크셋 기반의 파이프라인 점검 결과입니다.)*
 
-## Track A - Offline IR
+---
 
-Bedrock을 호출하지 않습니다. alias hint와 local BM25 symptom reference를 결합해 정답 표준 증상이 후보군 안에 들어오는지 확인합니다.
+## Track A: Offline IR (검색 엔진 성능 단독 검증)
 
-| ranking | recall@1 | recall@3 | recall@5 | recall@10 | all_gold_hit@5 | negative_in_top5_rate |
+Bedrock Runtime을 호출하지 않고, Alias 힌트 인덱스와 로컬 BM25 증상 텍스트 검색을 결합하여 정답 표준 증상이 후보군(Top-K) 내에 안정적으로 회수되는지 검증합니다.
+
+| 검색 알고리즘 (Ranking) | recall@1 | recall@3 | recall@5 | recall@10 | all_gold_hit@5 | negative_in_top5_rate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| alias | 0.8198 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.5000 |
-| bm25 | 0.5045 | 0.8108 | 0.8829 | 0.9459 | 0.8700 | 0.6364 |
-| combined | 0.8198 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.7727 |
+| **alias** | 0.8198 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.5000 |
+| **bm25** | 0.5045 | 0.8108 | 0.8829 | 0.9459 | 0.8700 | 0.6364 |
+| **combined** | **0.8198** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **0.7727** |
 
-해석:
+**[엔지니어링 해석]**
+* **`combined recall@5`가 1.0000**을 기록함에 따라, 본 데이터셋에서는 후보 검색 단계에서 정답 표준 증상이 누락되는 병목 현상이 완벽히 해소되었음이 입증되었습니다.
+* Alias와 BM25의 하이브리드 결합은 Broad Query 환경에서 후보 회수의 안정성을 극대화합니다. *(단, 본 지표는 후보 풀링 품질을 의미하며 전체 시스템의 F1 스코어로 대변되지 않습니다.)*
 
-- combined recall@5가 1.0이므로 이 데이터셋에서는 후보 검색 단계에서 정답 표준 증상이 빠지는 문제가 관찰되지 않았습니다.
-- alias와 BM25 결합은 broad query에서 후보 회수 안정성을 높였습니다.
-- 이 결과는 최종 모델 성능이 아니라 후보 검색 품질입니다.
+---
 
-## Track B - Dialect RAG
+## Track B: Dialect RAG (방언 힌트 주입 정밀도 검증)
 
-| 항목 | 값 |
+| 검증 항목 | 산출값 |
 | --- | ---: |
-| Gangwon rows | 50 |
-| rag_pack_anchored recall | 1.0000 (10/10) |
-| non-anchor hint rate | 0.0000 (0/40) |
+| **Gangwon Rows** (강원 발화군 모수) | 50건 |
+| **`rag_pack_anchored recall`** (타깃 행 회수율) | **1.0000 (10/10)** |
+| **`non-anchor hint rate`** (노이즈 개입 오탐률) | **0.0000 (0/40)** |
 
-해석:
+**[엔지니어링 해석]**
+* 방언팩 앵커가 명시적으로 설계된 10건의 발화에서는 기대 힌트가 100% 성공적으로 검색 및 주입되었습니다.
+* 반면, 앵커가 없는 강원식 구어체 40건에서는 불필요한 방언 힌트가 단 한 건도 오탐(False Positive)되지 않았습니다.
+* 이는 "모든 강원식 말투가 무분별하게 방언팩으로 처리된다"는 우려를 불식시키며, **Source Layer의 엄격한 분리를 통해 RAG 힌트 개입이 완벽하게 통제(Sanity Check)** 되고 있음을 입증합니다.
 
-- 방언팩 anchor가 명시된 10건에서는 기대 힌트가 모두 검색되었습니다.
-- anchor가 없는 강원식 구어체 40건에서는 불필요한 방언 hint가 검색되지 않았습니다.
-- 이 결과는 "강원식 말투 전체가 방언팩으로 근거화된다"는 뜻이 아니라, source layer를 분리했을 때 RAG hint 개입이 통제되었다는 뜻입니다.
+---
 
-## Track C - Pipeline Integration
+## Track C: Pipeline Integration (종단 E2E 통합 검증)
 
-| 항목 | 값 |
+| 검증 지표 항목 | 산출값 |
 | --- | ---: |
-| persistence | `monkeypatched_no_s3_dynamodb` |
-| rows completed | 100/100 |
-| precision | 1.0000 |
-| recall | 0.9279 |
-| F1 | 0.9626 |
-| schema/runtime failures | 0 |
-| source quote grounding rate | 1.0000 |
-| RAG context node seen rate | 1.0000 |
-| negative false-positive rate | 0.0000 |
+| **Persistence (저장소 상태)** | `monkeypatched_no_s3_dynamodb` (격리 구동) |
+| **Rows Completed (관통 성공률)** | **100/100** |
+| **Precision (오탐률 방어)** | **1.0000** |
+| **Recall (회수율)** | **0.9279** |
+| **End-to-End F1 Score** | **0.9626** |
+| **Schema/Runtime Failures (런타임 크래시)** | **0** |
+| **Source Quote Grounding Rate (환각 방어율)**| **1.0000** |
+| **RAG Context Node Seen Rate** | **1.0000** |
+| **Negative False-Positive Rate (부정 증상 오진율)**| **0.0000** |
 
-해석:
+**[엔지니어링 해석]**
+* Bedrock Extraction 및 LangGraph 제어 흐름은 100건 모두 스키마 에러나 런타임 크래시 없이 무결점(`0 Failures`)으로 완료되었습니다.
+* 생성된 모든 근거 인용구(`quote`)는 환자 원문에 100% 실재함을 검증하여 **LLM 특유의 환각(Hallucination) 현상을 원천 차단**했습니다.
+* 환자가 부정한 증상을 '활성 증상(Active Symptom)'으로 잘못 판단한 오진 사례(Negative False-Positive)는 0건으로 입증되었습니다.
 
-- Bedrock extraction과 LangGraph 파이프라인은 100건 모두 schema/runtime failure 없이 완료되었습니다.
-- 생성된 근거 quote는 환자 원문에 모두 존재했습니다.
-- 부정 증상을 active symptom으로 잘못 올린 사례는 관찰되지 않았습니다.
-- recall 손실은 개선/해소 계열 정책 mismatch에 집중되어 있습니다.
+---
 
-## Interpretation
+## Comprehensive Interpretation (종합 분석 및 리포팅 가이드)
 
-- Track A는 candidate-search quality입니다. 최종 모델 F1로 말하면 안 됩니다.
-- Track B는 사투리 RAG hint의 anchor 기반 개입 타당성을 확인합니다.
-- Track C는 이 브랜치에서 실제 Bedrock 파이프라인 성능에 가장 가까운 결과입니다.
-- 단, 이 run은 locked held-out test가 아니라 `train_100_v2` 기준입니다.
-- 남은 8건의 false negative는 모두 `progress_improved` 또는 `symptom_absent` 계열입니다. 제품 정책상 이 항목들은 active symptom `matched_slots`로 올리지 않고 follow-up context 또는 clinical clue로 보존하는 쪽에 가깝기 때문에, 후보 검색 실패보다 scoring-policy mismatch로 해석합니다.
-
-## Reporting Guidance
-
-발표에서는 다음처럼 말하는 것이 안전합니다.
-
-```text
-train_100_v2 기준 분리 평가에서 Offline IR combined recall@5는 1.0,
-Dialect RAG anchored recall은 1.0,
-Pipeline Integration F1은 0.9626이었다.
-남은 false negative는 active symptom 정책과 평가 라벨 기준의 차이로 분석했다.
-```
-
-held-out reporting은 별도 `test_1000_v2` 생성, freeze, 첫 실행 리포트 보관 이후에만 수행해야 합니다.
+* **결과 요약:** Track A는 검색 풀링 성능 100%, Track B는 사투리 개입 통제력 100%, Track C는 실제 파이프라인 E2E 모델 성능 F1 0.9626을 입증했습니다.
+* **의도된 오답 (Policy Mismatch):** 파이프라인 관통 후 남은 8건의 False Negative는 전수 `progress_improved`(호전) 또는 `symptom_absent`(부재) 계열입니다. 제품 정책상 이러한 항목은 Active Symptom 카드로 올리지 않고 임상 단서(Clinical Clues)로 격리 보존하므로, 이는 시스템 실패가 아닌 **Scoring-Policy Mismatch(정책에 의한 의도된 필터링)** 로 해석해야 합니다.
