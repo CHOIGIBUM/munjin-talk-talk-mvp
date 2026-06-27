@@ -157,12 +157,3 @@ python evaluation/dialect_rag/run_dialect_semantic_eval.py \
 ```
 
 *(고속 스모크 테스트 시에는 끝에 `--limit 20` 플래그를 할당하여 상위 20건만 파이프라인을 관통시킵니다.)*
-
----
-
-## 9. Git 형상 관리 거버넌스
-
-| 구분 | 통제 대상 경로 | 형상 관리 사상 |
-| :---: | --- | --- |
-| **커밋 확정 대상** | `README.md`<br>`run_dialect_semantic_eval.py`<br>`data/dialect_norm_eval_200.*`<br>`reports/summary.json`<br>`reports/failed_cases.csv` | 재현 가능한 시드 데이터셋과 최종 지표 스냅샷은 프로젝트 마스터 아티팩트로 영구 트래킹합니다. |
-| **커밋 차단 대상** | `reports/run_latest/`<br>`*_case_results.jsonl`<br>Bedrock Raw Trace 로그 | Bedrock Judge의 확률적 변동성이 섞인 대량 런타임 중간 로그는 레포지토리에 적재하지 않습니다. |
