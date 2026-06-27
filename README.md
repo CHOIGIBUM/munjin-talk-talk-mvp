@@ -1,82 +1,62 @@
-# 문진톡톡 사투리 RAG 평가 브랜치
+# 문진톡톡 사투리 RAG 의미 보존 평가 브랜치
 
-이 브랜치는 문진톡톡 공식 서비스 코드가 아니라, 사투리 RAG가 문진 답변의 의미를 보존하면서 표준어 보조 문장 생성을 돕는지 확인한 평가 자료 브랜치입니다.
+본 브랜치(`eval/dialect-rag`)는 문진톡톡 공식 서비스 코드와 분리되어, **사투리 RAG(Retrieval-Augmented Generation) 파이프라인의 '의미적 무결성(Semantic Integrity)'을 정량적으로 검증하기 위한 탐색적 실험(Exploratory Evaluation) 환경**입니다.
 
-공식 서비스 설명과 실행 코드는 [main 브랜치](https://github.com/X-AI-KNU/munjin-talk-talk/tree/main)를 기준으로 봅니다. 이 브랜치는 해커톤 제출 시 "사투리 RAG 실험과 성능 점검 근거"를 따로 보여주기 위해 분리했습니다.
+공식 서비스 아키텍처 및 메인 실행 코드는 [main 브랜치](https://github.com/X-AI-KNU/munjin-talk-talk/tree/main)를 기준으로 합니다. 본 브랜치는 해커톤 심사 및 기술 검토 과정에서 **"사투리를 표준어로 치환할 때 원문 데이터의 왜곡이나 손실이 발생하지 않는가?"** 에 대한 엔지니어링 검증 근거를 투명하게 제공하기 위해 별도 구축되었습니다.
 
-## 평가 질문
+---
 
-고령 환자는 문진 과정에서 사투리, 구어체, 지역 표현을 섞어 말할 수 있습니다. 문진톡톡의 사투리 RAG는 이런 표현을 바로 진단이나 증상명으로 확정하지 않고, 강원 방언팩에서 찾은 힌트를 Bedrock 표준어 변환 프롬프트에 참고 정보로 넣습니다.
+## 1. 벤치마크 핵심 목적 (Core Evaluation Question)
 
-이 브랜치에서 확인하는 질문은 하나입니다.
+고령 환자는 문진 과정에서 강원 방언, 구어체, 지역 특유의 비정형 표현을 빈번하게 사용합니다. 문진톡톡의 사투리 RAG는 이러한 표현을 마주했을 때 즉시 진단명으로 단정 짓지 않고, 강원 방언팩에서 매칭된 어휘 힌트를 Bedrock 표준어 변환 프롬프트에 '참고 정보'로만 제한하여 주입합니다.
 
-```text
-사투리/구어체 문진 답변을 표준어 보조 문장으로 바꿨을 때,
-환자가 말한 증상, 부정 표현, 시점, 정도, 복약 사실, 질문 의도가 유지되는가?
-```
+따라서 본 브랜치에서 입증하고자 하는 단 하나의 핵심 검증 명세는 다음과 같습니다.
 
-## 바로 보기
+> **임상적 의미 보존 검증 (Clinical Semantic Preservation)**
+> 사투리 및 구어체 문진 답변을 표준어 보조 문장으로 치환했을 때, 환자가 발화한 **[증상명, 부정 맥락, 시점, 정도, 복약 사실, 질문 의도]**가 임의로 추가(Hallucination)되거나 누락(Omission)되지 않고 100% 보존되는가?
 
-| 문서/파일 | 내용 |
+---
+
+## 2. 참조 아티팩트 색인
+
+본 브랜치에 수록된 평가 파이프라인 및 지표 산출물입니다.
+
+| 문서 / 파일 링크 | 포함 내용 및 임상적 역할 |
 | --- | --- |
-| [평가 상세 설명](evaluation/dialect_rag/README.md) | 평가 목적, 데이터 구조, 실행 방법, 지표 해석 |
-| [평가 요약 지표](evaluation/dialect_rag/reports/summary.json) | 200개 케이스 기준 집계 결과 |
-| [실패 케이스](evaluation/dialect_rag/reports/failed_cases.csv) | 의미 불일치, 정보 추가/누락 등 실패 사례 |
-| [평가 데이터](evaluation/dialect_rag/data/dialect_norm_eval_200.jsonl) | 사투리/구어체 입력과 기준 표준어 문장 |
-| [평가 스크립트](evaluation/dialect_rag/run_dialect_semantic_eval.py) | RAG 힌트 검색, Bedrock 변환, Bedrock judge 평가 |
-| [방언팩 위치 안내](backend/serverless/src/data/README.md) | `dialect_packs/dialect_kangwon.json` 역할 설명 |
+| **[평가 프레임워크 명세](README.md)** | 평가 목적, 데이터 스키마, CLI 실행 방법, 지표 해석 가이드 |
+| **[공식 요약 지표](reports/summary.json)** | 200개 검증 케이스 기준 핵심 정량 지표 스냅샷 |
+| **[실패 케이스 덤프](reports/failed_cases.csv)** | 의미 불일치, 정보 임의 추가/누락 등 취약 패턴 집중 분석 인벤토리 |
+| **[평가 데이터셋](data/dialect_norm_eval_200.jsonl)**| 사투리/구어체 입력 Raw 발화와 임상 기준 표준어(Gold Standard) 매핑 |
+| **[평가 실행 스크립트](run_dialect_semantic_eval.py)** | RAG 힌트 검색 $\rightarrow$ Bedrock 생성 $\rightarrow$ Judge 교차 검증 자동화 러너 |
+| **[방언팩 런타임 가이드](backend/serverless/src/data/README.md)** | `dialect_kangwon.json`의 파이프라인 내 역할 및 주입 방법론 |
 
-## 평가 흐름
+---
+
+## 3. 평가 파이프라인 시퀀스
+
+평가 스크립트는 백엔드 내부의 `retrieve_dialect_context()` 함수를 직접 호출하여 실제 프로덕션과 동일한 제약 조건 하에서 구동됩니다.
 
 ```text
-평가 입력 문장
-  -> local_dialect_rag가 강원 방언팩에서 힌트 검색
-  -> Bedrock Nova Lite가 표준어 보조 문장 생성
-  -> Bedrock Nova Lite judge가 원문/정답/생성문 비교
-  -> summary.json과 failed_cases.csv로 결과 정리
+[Step 01] 평가 입력 패치      ──> 사투리/구어체 환자 원문 텍스트 주입
+[Step 02] 로컬 방언 RAG 검색 ──> dialect_kangwon.json에서 어휘 힌트(prompt_note) 추출
+[Step 03] 표준어 생성 추론    ──> Bedrock Nova Lite 구동 (원문 팩트 추가/누락 금지 제약 강제)
+[Step 04] 의미 보존 LLM Judge ──> Nova Lite Judge가 [원문 vs 정답 vs 생성문] 삼자 교차 대조
+[Step 05] 아티팩트 최종 집계  ──> summary.json 및 failed_cases.csv로 리포팅
 ```
 
-평가 스크립트는 `backend/serverless/src/dialect_rag.py`의 `retrieve_dialect_context()`를 사용합니다. 이 함수는 `dialect_packs/dialect_kangwon.json`에서 방언 표현을 찾아 `prompt_note` 형태의 힌트를 만들고, normalizer 프롬프트는 이 힌트를 "어휘 참고"로만 사용합니다. 원문에 없는 증상, 약, 시점, 정도를 추가하지 말라는 제한도 함께 들어갑니다.
+---
 
-## 현재 결과 요약
+## 4. 엄격한 성공 판정 매트릭스
 
-`evaluation/dialect_rag/reports/summary.json` 기준입니다.
+단일 테스트 케이스는 아래 4대 평가 지표를 단 하나도 누락 없이 100% 충족(AND 연산)해야만 최종 성공(`ok`)으로 확정됩니다.
 
-| 항목 | 값 | 의미 |
-| --- | ---: | --- |
-| 평가 케이스 수 | 200 | synthetic/starter set 기준 |
-| 변환 모델 | `apac.amazon.nova-lite-v1:0` | 표준어 보조 문장 생성 |
-| Judge 모델 | `apac.amazon.nova-lite-v1:0` | 의미 보존 여부 판정 |
-| 의미 성공률 | 0.900 | 아래 4개 조건을 모두 통과한 비율 |
-| 동일 의미 판정률 | 0.925 | 원문 의미가 유지됐다고 본 비율 |
-| 표준어 판정률 | 0.990 | 생성문이 자연스러운 표준어라고 본 비율 |
-| 정보 추가 없음 | 0.965 | 원문에 없는 증상/약/시점/정도 등이 추가되지 않은 비율 |
-| 정보 누락 없음 | 0.930 | 원문에 있던 핵심 정보가 빠지지 않은 비율 |
-| 평균 RAG 힌트 수 | 0.275 | 케이스당 검색된 방언 힌트 평균 |
+```
+Semantic Success = same_meaning ∧ standard_korean ∧ ¬added_fact ∧ ¬omitted_fact
+```
 
-`semantic_success_rate`는 다음 네 조건을 동시에 만족해야 성공으로 계산됩니다.
-
-- `same_meaning == true`
-- `standard_korean == true`
-- `added_fact == false`
-- `omitted_fact == false`
-
-실패 유형은 `added_fact` 7건, `meaning_mismatch` 1건, `not_standard_korean` 2건, `omitted_fact` 10건입니다. 실패 사례는 [failed_cases.csv](evaluation/dialect_rag/reports/failed_cases.csv)에서 원문, 기준 표준어, 모델 변환문, judge 사유까지 함께 확인할 수 있습니다.
-
-## 제출 시 해석 기준
-
-이 결과는 "문진톡톡이 사투리 표현을 표준어 보조 문장으로 옮길 때 의미 보존을 얼마나 유지했는가"를 보여주는 내부 평가입니다.
-
-다음처럼 표현하는 것은 적절합니다.
-
-- 사투리/구어체 문진 답변 200개 starter set에 대해 의미 보존 평가를 수행했다.
-- 정보 추가와 정보 누락을 별도 지표로 분리해 의료 문진에서 위험한 변환을 확인했다.
-- 실패 케이스를 따로 남겨 어떤 표현에서 변환이 흔들리는지 검토할 수 있게 했다.
-
-다음처럼 표현하면 안 됩니다.
-
-- 병원 실데이터 전체에서 검증된 임상 성능이라고 주장
-- 진단, 처방, 질병 예측 성능으로 해석
-- 모든 지역 방언과 모든 진료과에 일반화된 성능으로 주장
-
-이 브랜치는 서비스 기능을 과장하기 위한 문서가 아니라, 사투리 RAG가 어디까지 동작했고 어디에서 실패했는지 투명하게 보여주는 평가 기록입니다.
+| 평가 지표명 | 판정 기준 명세 | 임상적 방어 목표 |
+|---|---|---|
+| `same_meaning` | 원문의 핵심 증상, 시점 변화, 복약 사실이 유지되었는가 | 문진 데이터의 본질적 의미왜곡 방지 |
+| `standard_korean` | 변환 결과물이 문법적으로 자연스러운 표준 한국어인가 | 의료진 가독성 및 후속 파싱 안정성 확보 |
+| `added_fact` | **[False 강제]** 원문에 없던 증상, 시점, 정도가 추가되었는가 | LLM의 자의적 과잉 임상 판단(환각) 차단 |
+| `omitted_fact` | **[False 강제]** 원문에 있던 통증 정도나 부정 맥락이 빠졌는가 | 중증 위험 단서의 치명적 소실 방어 |
