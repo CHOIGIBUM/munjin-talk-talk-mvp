@@ -59,7 +59,7 @@ serverless/
 ├── README.md
 ├── src/
 │   ├── handler.py
-│   ├── auth.py
+│   ├── security.py
 │   ├── settings.py
 │   ├── orchestration.py
 │   ├── sessions.py
