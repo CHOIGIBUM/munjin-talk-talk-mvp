@@ -71,6 +71,7 @@ export default function PatientFlow({
   const [consentError, setConsentError] = useState('')
   const [questionSet, setQuestionSet] = useState(null)
   const [doneQueuePosition, setDoneQueuePosition] = useState(Number(doctorQueuePosition || 0))
+  const [questionAttempt, setQuestionAttempt] = useState(0)
 
   const questionVisits = questionSet?.visits || QUESTIONS
   const questions = visitType ? (questionVisits[visitType] || QUESTIONS[visitType] || []) : []
@@ -187,6 +188,7 @@ export default function PatientFlow({
   const handleVisitTypeConfirm = useCallback((path) => {
     setVisitType(path)
     setQuestionIndex(0)
+    setQuestionAttempt(0)
     setTranscript('')
     setStep(STEPS.Q_VOICE)
   }, [])
@@ -270,6 +272,7 @@ export default function PatientFlow({
     }
 
     setQuestionIndex(questionIndex + 1)
+    setQuestionAttempt(0)
     setStep(STEPS.Q_VOICE)
   }, [
     answers,
@@ -291,6 +294,7 @@ export default function PatientFlow({
 
   const handleRetryTranscript = useCallback(() => {
     setTranscript('')
+    setQuestionAttempt((value) => value + 1)
     setStep(STEPS.Q_VOICE)
   }, [])
 
@@ -414,6 +418,7 @@ export default function PatientFlow({
       case STEPS.Q_VOICE:
         return (
           <VoiceScreen
+            key={`${currentQuestion?.id || 'question'}-${questionAttempt}`}
             sessionId={activeSessionId}
             patient={displayPatient}
             visitType={visitType}
@@ -429,6 +434,7 @@ export default function PatientFlow({
       case STEPS.Q_CONFIRM:
         return (
           <ConfirmTranscriptScreen
+            key={`${currentQuestion?.id || 'question'}-${questionAttempt}-confirm`}
             patient={displayPatient}
             visitType={visitType}
             question={currentQuestion}
