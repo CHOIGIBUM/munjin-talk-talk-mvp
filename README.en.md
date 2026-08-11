@@ -22,6 +22,9 @@ An AI questionnaire-assistant MVP that structures spoken answers from elderly pa
 <a href="https://main.dv5herezqtt1t.amplifyapp.com">
   <img src="https://img.shields.io/badge/Demo-Open%20the%20service-0ea5e9?style=for-the-badge" alt="Open the demo service" />
 </a>
+<a href="https://youtu.be/mBh-vd0MA8o">
+  <img src="https://img.shields.io/badge/DEMO-Watch%20the%20Video-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch the Munjin Talk-Talk demo" />
+</a>
 <a href="https://sw.kangwon.ac.kr/Home/H10000/H10300/boardView?board_key=4285">
   <img src="https://img.shields.io/badge/%F0%9F%8F%86%20Grand%20Prize-2026%20X%2BAI%C2%B7SW%20Convergence%20Project-f5b301?style=for-the-badge" alt="Excellence Award" />
 </a>
