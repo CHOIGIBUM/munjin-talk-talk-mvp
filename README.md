@@ -22,6 +22,9 @@
 <a href="https://main.dv5herezqtt1t.amplifyapp.com">
   <img src="https://img.shields.io/badge/Demo-%EC%84%9C%EB%B9%84%EC%8A%A4%20%EB%B0%94%EB%A1%9C%EA%B0%80%EA%B8%B0-0ea5e9?style=for-the-badge" alt="데모 서비스 바로가기" />
 </a>
+<a href="https://youtu.be/mBh-vd0MA8o">
+  <img src="https://img.shields.io/badge/DEMO-시연%20영상%20보기-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="문진톡톡 시연 영상 보기" />
+</a>
 <a href="https://sw.kangwon.ac.kr/Home/H10000/H10300/boardView?board_key=4285">
   <img src="https://img.shields.io/badge/%F0%9F%8F%86%20%EC%B5%9C%EC%9A%B0%EC%88%98%EC%83%81-2026%20X%2BAI%C2%B7SW%20%EC%9C%B5%ED%95%A9%20%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%20%EA%B2%BD%EC%A7%84%EB%8C%80%ED%9A%8C-f5b301?style=for-the-badge" alt="최우수상 수상" />
 </a>
